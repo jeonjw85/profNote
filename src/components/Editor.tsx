@@ -64,7 +64,7 @@ export function Editor({ note, onPatch, onDelete }: EditorProps) {
     const [title, setTitle] = useState(note.title);
     const [summary, setSummary] = useState(note.summary_md);
     const [transcript, setTranscript] = useState(note.transcript);
-    const [preview, setPreview] = useState(note.summary_md.length > 0);
+    const [preview, setPreview] = useState(true);
     const [tab, setTab] = useState<EditorTab>(
         note.summary_md.length > 0 ? "summary" : "transcript",
     );
@@ -76,7 +76,7 @@ export function Editor({ note, onPatch, onDelete }: EditorProps) {
     if (syncedId !== note.id) {
         setSyncedId(note.id);
         setTab(note.summary_md.length > 0 ? "summary" : "transcript");
-        setPreview(note.summary_md.length > 0);
+        setPreview(true);
     }
     if (syncedAt !== note.updated_at) {
         setSyncedAt(note.updated_at);
