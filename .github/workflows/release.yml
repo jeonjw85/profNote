@@ -25,7 +25,9 @@ jobs:
 
       - run: npm ci
 
-      - uses: tauri-apps/tauri-app-action@v0
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: v__VERSION__
           releaseName: profNote v__VERSION__
