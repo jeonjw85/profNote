@@ -87,3 +87,16 @@ cargo clippy --manifest-path src-tauri/Cargo.toml
 
 녹음, 모델, 노트, SQLite DB는 앱 데이터 디렉터리(`~/Library/Application Support/kr.jjw.profNote/`)에 저장됩니다.  
 전사는 로컬에서만 수행되며, 요약 시 전사 텍스트만 설정된 LLM API로 전송됩니다.
+
+## 릴리즈 macOS에서 열기 (서명되지 않은 앱)
+
+이 앱은 Apple Developer ID로 서명되지 않았습니다.  
+브라우저로 받은 설치 파일을 처음 열면 `'profNote.app'은(는) 손상되었기 때문에 열 수 없습니다`라는 메시지가 나올 수 있는데 실제 손상이 아니라 macOS가 서명되지 않은 앱을 차단합니다.
+
+터미널에서 아래 명령 실행(1회):
+
+```bash
+xattr -cr /Applications/profNote.app
+```
+
+이후에는 정상적으로 열립니다.
