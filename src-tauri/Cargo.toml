@@ -1,0 +1,24 @@
+[package]
+name = "profnote"
+version = "0.1.0"
+description = "Lecture recorder and markdown note editor"
+authors = ["jjw"]
+edition = "2021"
+
+[lib]
+name = "profnote_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri-plugin-sql = { version = "2.4.0", features = ["sqlite"] }
+thiserror = "2.0.20"
+cpal = "0.18.1"
+hound = "3.5.1"
+whisper-rs = { version = "0.16.0", features = ["raw-api"] }
+ureq = { version = "3.4.0", features = ["rustls", "json"] }
