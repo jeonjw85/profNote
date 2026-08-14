@@ -3,7 +3,7 @@ name = "profnote"
 version = "0.2.0"
 description = "Lecture recorder and markdown note editor"
 authors = ["jjw"]
-edition = "2021"
+edition = "2024"
 
 [lib]
 name = "profnote_lib"

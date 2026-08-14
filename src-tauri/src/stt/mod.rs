@@ -136,13 +136,13 @@ pub fn download_model(
     }
     file.flush()?;
     drop(file);
-    if let Some(total) = total_bytes {
-        if downloaded != total {
-            std::fs::remove_file(&partial).ok();
-            return Err(AppError::Download(format!(
-                "incomplete download: {downloaded} of {total} bytes"
-            )));
-        }
+    if let Some(total) = total_bytes
+        && downloaded != total
+    {
+        std::fs::remove_file(&partial).ok();
+        return Err(AppError::Download(format!(
+            "incomplete download: {downloaded} of {total} bytes"
+        )));
     }
     std::fs::rename(&partial, &destination)?;
     let _ = on_event.send(DownloadEvent::Done {
