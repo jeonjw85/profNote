@@ -137,6 +137,12 @@ export default function App() {
         };
     } else if (loadError ?? appError) {
         toast = { tone: "error", text: loadError ?? appError ?? "" };
+    } else if (pipeline.warning) {
+        toast = {
+            tone: "info",
+            text: pipeline.warning,
+            dismiss: pipeline.clearWarning,
+        };
     } else if (pipeline.pipeline) {
         const { stage, percent, charsReceived } = pipeline.pipeline;
         let suffix = "";

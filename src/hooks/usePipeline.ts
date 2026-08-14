@@ -29,10 +29,12 @@ interface PipelineOptions {
 export function usePipeline({ settings, onNotesChanged, onNoteCreated }: PipelineOptions) {
   const [pipeline, setPipeline] = useState<PipelineState | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   const run = useCallback(
     async (capture: RecordingStopped) => {
       setFailure(null);
+      setWarning(null);
       const id = crypto.randomUUID();
       const now = new Date().toISOString();
       const note: Note = {
@@ -53,26 +55,29 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
         onNoteCreated(id);
 
         let speakers: SpeakerSegment[] = [];
-        if (
-          settings.enableDiarization &&
-          settings.diarizationPython.trim() &&
-          settings.diarizationScript.trim()
-        ) {
-          setPipeline({
-            noteId: id,
-            stage: "diarizing",
-            percent: null,
-            charsReceived: null,
-          });
-          try {
-            speakers = await runDiarization(
-              capture.wavPath,
-              settings.diarizationPython.trim(),
-              settings.diarizationScript.trim(),
-              settings.huggingFaceToken
+        if (settings.enableDiarization) {
+          if (settings.diarizationPython.trim() && settings.diarizationScript.trim()) {
+            setPipeline({
+              noteId: id,
+              stage: "diarizing",
+              percent: null,
+              charsReceived: null,
+            });
+            try {
+              speakers = await runDiarization(
+                capture.wavPath,
+                settings.diarizationPython.trim(),
+                settings.diarizationScript.trim(),
+                settings.huggingFaceToken
+              );
+            } catch (caught) {
+              console.warn("diarization skipped:", toMessage(caught));
+              setWarning(`화자 분리를 건너뛰었습니다: ${toMessage(caught)}`);
+            }
+          } else {
+            setWarning(
+              "화자 분리가 설정되지 않아 건너뛰었습니다. 설정에서 Python 실행 파일과 스크립트 경로를 지정하세요."
             );
-          } catch (caught) {
-            console.warn("diarization skipped:", toMessage(caught));
           }
         }
 
@@ -139,9 +144,13 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
                 charsReceived: receivedChars,
               })
           );
-          await writeMarkdown(`note_${id.slice(0, 8)}`, renderMarkdownDocument(note.title, summary));
           await updateNoteFields(id, { summary_md: summary, status: "ready" });
           await onNotesChanged();
+          try {
+            await writeMarkdown(`note_${id.slice(0, 8)}`, renderMarkdownDocument(note.title, summary));
+          } catch (caught) {
+            setWarning(`Markdown 파일 저장에 실패했습니다: ${toMessage(caught)}`);
+          }
         }
         setPipeline(null);
       } catch (caught) {
@@ -159,6 +168,7 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
   );
 
   const clearFailure = useCallback(() => setFailure(null), []);
+  const clearWarning = useCallback(() => setWarning(null), []);
 
-  return { pipeline, failure, clearFailure, run };
+  return { pipeline, failure, clearFailure, warning, clearWarning, run };
 }

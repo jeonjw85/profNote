@@ -72,18 +72,46 @@ export function Editor({ note, onPatch, onDelete }: EditorProps) {
     const [professor, setProfessor] = useState(note.professor_speaker);
     const [syncedId, setSyncedId] = useState(note.id);
     const [syncedAt, setSyncedAt] = useState(note.updated_at);
+    const [syncedValues, setSyncedValues] = useState({
+        title: note.title,
+        summary: note.summary_md,
+        transcript: note.transcript,
+        professor: note.professor_speaker,
+    });
 
     if (syncedId !== note.id) {
         setSyncedId(note.id);
+        setSyncedAt(note.updated_at);
+        setSyncedValues({
+            title: note.title,
+            summary: note.summary_md,
+            transcript: note.transcript,
+            professor: note.professor_speaker,
+        });
+        setTitle(note.title);
+        setSummary(note.summary_md);
+        setTranscript(note.transcript);
+        setProfessor(note.professor_speaker);
+        setConfirmingDelete(false);
         setTab(note.summary_md.length > 0 ? "summary" : "transcript");
         setPreview(true);
     }
     if (syncedAt !== note.updated_at) {
         setSyncedAt(note.updated_at);
-        setTitle(note.title);
-        setSummary(note.summary_md);
-        setTranscript(note.transcript);
-        setProfessor(note.professor_speaker);
+        if (title === syncedValues.title) setTitle(note.title);
+        if (summary === syncedValues.summary) setSummary(note.summary_md);
+        if (transcript === syncedValues.transcript) {
+            setTranscript(note.transcript);
+        }
+        if (professor === syncedValues.professor) {
+            setProfessor(note.professor_speaker);
+        }
+        setSyncedValues({
+            title: note.title,
+            summary: note.summary_md,
+            transcript: note.transcript,
+            professor: note.professor_speaker,
+        });
         setConfirmingDelete(false);
     }
 

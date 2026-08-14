@@ -73,3 +73,7 @@ export async function downloadModel(
 export async function writeMarkdown(filename: string, content: string): Promise<string> {
   return z.string().parse(await invoke("write_markdown", { filename, content }));
 }
+
+export async function deleteAudio(path: string): Promise<void> {
+  await invoke("delete_audio", { path });
+}

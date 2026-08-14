@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
+import { deleteAudio } from "../services/audio";
 import {
   deleteNote,
   fetchNotes,
+  recoverInterruptedNotes,
   updateNoteFields,
   type NotePatch,
 } from "../services/db";
@@ -25,6 +27,7 @@ export function useNotes() {
   useEffect(() => {
     const load = async () => {
       try {
+        await recoverInterruptedNotes();
         const loaded = await fetchNotes();
         setNotes(loaded);
         setLoadError(null);
@@ -50,14 +53,18 @@ export function useNotes() {
   const removeNote = useCallback(
     async (id: string) => {
       try {
+        const target = notes.find((note) => note.id === id);
         await deleteNote(id);
+        if (target?.audio_path) {
+          await deleteAudio(target.audio_path).catch(() => undefined);
+        }
         await refresh();
         setSelectedId((current) => (current === id ? null : current));
       } catch (caught) {
         setLoadError(toMessage(caught));
       }
     },
-    [refresh]
+    [notes, refresh]
   );
 
   return {

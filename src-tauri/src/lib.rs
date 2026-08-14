@@ -81,8 +81,11 @@ fn stop_recording(state: State<'_, AppState>) -> Result<RecordingStopped, AppErr
     let pcm = active.stop()?;
     let wav_path = pcm.path.with_extension("wav");
     if let Err(error) = sidecar::ffmpeg::pcm_to_wav16k_mono(&pcm, &wav_path) {
-        std::fs::remove_file(&pcm.path).ok();
-        return Err(error);
+        std::fs::remove_file(&wav_path).ok();
+        return Err(AppError::Recording(format!(
+            "{error}; raw audio kept at {} for recovery",
+            pcm.path.display()
+        )));
     }
     std::fs::remove_file(&pcm.path)?;
     Ok(RecordingStopped {
@@ -203,6 +206,22 @@ fn write_markdown(
     Ok(path.to_string_lossy().into_owned())
 }
 
+#[tauri::command]
+fn delete_audio(state: State<'_, AppState>, path: String) -> Result<(), AppError> {
+    let target = PathBuf::from(&path);
+    let recordings_dir = state.data_dir.join("recordings");
+    if target.parent() != Some(recordings_dir.as_path()) {
+        return Err(AppError::InvalidInput(
+            "audio path must be inside the recordings directory".into(),
+        ));
+    }
+    match std::fs::remove_file(&target) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = db::register(tauri::Builder::default())
@@ -228,6 +247,7 @@ pub fn run() {
             run_diarization,
             stream_llm_chat,
             write_markdown,
+            delete_audio,
         ]);
     if let Err(error) = builder.run(tauri::generate_context!()) {
         eprintln!("profnote terminated with error: {error}");

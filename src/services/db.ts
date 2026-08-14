@@ -87,6 +87,17 @@ export async function deleteNote(id: string): Promise<void> {
   await db.execute("DELETE FROM notes WHERE id = $1", [id]);
 }
 
+export async function recoverInterruptedNotes(): Promise<void> {
+  const db = await getConnection();
+  await db.execute(
+    `UPDATE notes
+     SET status = CASE WHEN transcript = '' THEN 'error' ELSE 'ready' END,
+         updated_at = $1
+     WHERE status IN ('transcribing', 'summarizing')`,
+    [new Date().toISOString()]
+  );
+}
+
 export async function fetchSettings(): Promise<Settings> {
   const db = await getConnection();
   const rows = await db.select<Array<{ key: string; value: string }>>(
