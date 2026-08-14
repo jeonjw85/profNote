@@ -15,6 +15,41 @@ use crate::error::AppError;
 const CALLBACK_CHUNK_SAMPLES: usize = 8192;
 const FLUSH_SAMPLE_COUNT: u64 = 480_000;
 
+#[cfg(target_os = "macos")]
+const MIC_PERMISSION_MESSAGE: &str = "마이크 접근이 거부되었습니다. 시스템 설정 > 개인 정보 보호 및 보안 > 마이크에서 profNote를 허용한 뒤 다시 시도하세요.";
+
+#[cfg(target_os = "macos")]
+#[link(name = "AVFoundation", kind = "framework")]
+unsafe extern "C" {
+    static AVMediaTypeAudio: *const std::ffi::c_void;
+}
+
+#[cfg(target_os = "macos")]
+#[link(name = "objc")]
+unsafe extern "C" {
+    fn objc_getClass(name: *const std::ffi::c_char) -> *const std::ffi::c_void;
+    fn sel_registerName(name: *const std::ffi::c_char) -> *const std::ffi::c_void;
+    #[link_name = "objc_msgSend"]
+    fn mic_authorization_status(
+        receiver: *const std::ffi::c_void,
+        selector: *const std::ffi::c_void,
+        media_type: *const std::ffi::c_void,
+    ) -> isize;
+}
+
+// AVAuthorizationStatus: 0 notDetermined, 1 restricted, 2 denied, 3 authorized
+#[cfg(target_os = "macos")]
+fn microphone_denied() -> bool {
+    unsafe {
+        let class = objc_getClass(c"AVCaptureDevice".as_ptr());
+        let selector = sel_registerName(c"authorizationStatusForMediaType:".as_ptr());
+        matches!(
+            mic_authorization_status(class, selector, AVMediaTypeAudio),
+            1 | 2
+        )
+    }
+}
+
 pub struct PcmDescriptor {
     pub path: PathBuf,
     pub sample_rate: u32,
@@ -39,6 +74,10 @@ pub struct ActiveRecording {
 
 impl ActiveRecording {
     pub fn start(recordings_dir: &Path) -> Result<ActiveRecording, AppError> {
+        #[cfg(target_os = "macos")]
+        if microphone_denied() {
+            return Err(AppError::AudioDevice(MIC_PERMISSION_MESSAGE.into()));
+        }
         let host = cpal::default_host();
         let device = host
             .default_input_device()
@@ -75,6 +114,15 @@ impl ActiveRecording {
             ))),
         }?;
         stream.play()?;
+
+        #[cfg(target_os = "macos")]
+        if microphone_denied() {
+            drop(stream);
+            drop(chunk_tx);
+            let _ = writer.join();
+            std::fs::remove_file(&pcm_path).ok();
+            return Err(AppError::AudioDevice(MIC_PERMISSION_MESSAGE.into()));
+        }
 
         Ok(ActiveRecording {
             stream: Some(stream),
