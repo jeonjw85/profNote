@@ -1,5 +1,8 @@
 # profNote
 
+[![CI](https://github.com/jeonjw85/profNote/actions/workflows/ci.yml/badge.svg)](https://github.com/jeonjw85/profNote/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/jeonjw85/profNote)](https://github.com/jeonjw85/profNote/releases/latest)
+
 강의 음성을 녹음하면 화자 분리, 로컬 음성 인식(STT), LLM 요약을 거쳐 MD 강의 노트로 정리해 주는 데스크탑 앱
 
 ## 기능
