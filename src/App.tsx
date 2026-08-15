@@ -11,7 +11,13 @@ import { useRecorder } from "./hooks/useRecorder";
 import { downloadModel, getModelStatus } from "./services/audio";
 import { fetchSettings, saveSettings } from "./services/db";
 import { toMessage } from "./services/errors";
+import { checkForUpdate, installPendingUpdate } from "./services/updater";
 import type { DownloadProgress, Settings } from "./types";
+
+type UpdateState =
+    | { status: "available"; version: string }
+    | { status: "installing"; percent: number | null }
+    | null;
 
 const DEFAULT_SETTINGS: Settings = {
     openaiApiKey: "",
@@ -66,6 +72,7 @@ export default function App() {
     const [modelInstalled, setModelInstalled] = useState<boolean | null>(null);
     const [download, setDownload] = useState<DownloadProgress | null>(null);
     const [appError, setAppError] = useState<string | null>(null);
+    const [update, setUpdate] = useState<UpdateState>(null);
 
     const pipeline = usePipeline({
         settings: settings ?? DEFAULT_SETTINGS,
@@ -78,6 +85,16 @@ export default function App() {
         fetchSettings()
             .then(setSettings)
             .catch((caught) => setAppError(toMessage(caught)));
+    }, []);
+
+    useEffect(() => {
+        checkForUpdate()
+            .then((found) => {
+                if (found) {
+                    setUpdate({ status: "available", version: found.version });
+                }
+            })
+            .catch(() => undefined);
     }, []);
 
     useEffect(() => {
@@ -114,6 +131,25 @@ export default function App() {
     const handleSaveSettings = useCallback(async (next: Settings) => {
         await saveSettings(next);
         setSettings(next);
+    }, []);
+
+    const handleInstallUpdate = useCallback(async () => {
+        setUpdate({ status: "installing", percent: null });
+        try {
+            await installPendingUpdate((downloadedBytes, totalBytes) => {
+                const percent =
+                    totalBytes === null
+                        ? null
+                        : Math.min(
+                              100,
+                              Math.round((downloadedBytes / totalBytes) * 100),
+                          );
+                setUpdate({ status: "installing", percent });
+            });
+        } catch (caught) {
+            setUpdate(null);
+            setAppError(toMessage(caught));
+        }
     }, []);
 
     if (!settings) {
@@ -155,6 +191,20 @@ export default function App() {
             suffix = ` ${charsReceived.toLocaleString()}자`;
         }
         toast = { tone: "info", text: `${STAGE_TEXT[stage]}${suffix}` };
+    } else if (update?.status === "available") {
+        toast = {
+            tone: "info",
+            text: `v${update.version} 업데이트 가능 | 클릭해서 설치`,
+            dismiss: () => void handleInstallUpdate(),
+        };
+    } else if (update?.status === "installing") {
+        toast = {
+            tone: "info",
+            text:
+                update.percent === null
+                    ? "업데이트 다운로드 중"
+                    : `업데이트 설치 중 ${update.percent}%`,
+        };
     }
 
     return (

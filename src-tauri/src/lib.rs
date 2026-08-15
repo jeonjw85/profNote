@@ -225,6 +225,8 @@ fn delete_audio(state: State<'_, AppState>, path: String) -> Result<(), AppError
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = db::register(tauri::Builder::default())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let data_dir = app
                 .path()
