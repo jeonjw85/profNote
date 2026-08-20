@@ -1,6 +1,6 @@
 [package]
 name = "profnote"
-version = "0.2.3"
+version = "0.2.4"
 description = "Lecture recorder and markdown note editor"
 authors = ["jjw"]
 edition = "2024"
