@@ -9,21 +9,21 @@
 
 - 마이크 녹음
 - 화자 분리(pyannote) 후 교수님 발화만 선택해 전사 — 자동 추천 + 수동 정정
-- 로컬 전사: whisper.cpp (`medium` / `large-v3`, 앱 내에서 모델 다운로드)
+- 로컬 전사: whisper.cpp (`medium` / `large-v3` / `large-v3-turbo`, 앱 내에서 모델 다운로드, macOS Metal 가속)
 - LLM 요약: OpenAI 호환 API(스트리밍, 자동 재시도), 표 포함 Markdown 출력
 - 원문/요약 탭 전환, Markdown 미리보기, `.md` 파일 저장
 
 ## 기술 스택
 
-| 영역         | 기술                               |
-| ------------ | ---------------------------------- |
-| 데스크탑     | Tauri v2 (Rust)                    |
-| 프론트엔드   | React 19 + TypeScript, CSS Modules |
-| 오디오 캡처  | cpal                               |
-| 오디오 변환  | FFmpeg                             |
-| 전사         | whisper-rs (whisper.cpp 바인딩)    |
-| 화자 분리    | pyannote.audio                     |
-| 데이터베이스 | SQLite (tauri-plugin-sql)          |
+| 영역         | 기술                                  |
+| ------------ | ------------------------------------- |
+| 데스크탑     | Tauri v2 (Rust)                       |
+| 프론트엔드   | React 19 + TypeScript, CSS Modules    |
+| 오디오 캡처  | cpal                                  |
+| 오디오 변환  | FFmpeg                                |
+| 전사         | whisper-rs (whisper.cpp, macOS Metal) |
+| 화자 분리    | pyannote.audio                        |
+| 데이터베이스 | SQLite (tauri-plugin-sql)             |
 
 ## 요구 사항
 
@@ -64,7 +64,7 @@ python3 -m venv .venv-diarize
 | ------------------------------ | ---------------------------------------------------------------------------------------- |
 | AI 요약 사용                   | LLM 요약 단계 on/off                                                                     |
 | LLM API 키 / Base URL / 모델명 | OpenAI 호환 API, Base URL과 모델명은 비워두면 각각 `https://api.openai.com/v1`, `gpt-4o` |
-| Whisper 모델 / 전사 언어       | `medium` 또는 `large-v3`, 언어는 `ko`/`en`/`auto`                                        |
+| Whisper 모델 / 전사 언어       | `medium` / `large-v3` / `large-v3-turbo`, 언어는 `ko`/`en`/`auto`                        |
 | 화자 분리 사용                 | 화자 분리 단계 on/off                                                                    |
 
 ## 빌드

@@ -8,9 +8,11 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextPar
 use crate::error::AppError;
 use crate::sidecar::ffmpeg::TARGET_SAMPLE_RATE;
 
-pub const SUPPORTED_MODELS: &[&str] = &["medium", "large-v3"];
+pub const SUPPORTED_MODELS: &[&str] = &["medium", "large-v3", "large-v3-turbo"];
 
 const MODEL_BASE_URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
+const KO_INITIAL_PROMPT: &str =
+    "한국어 대학 강의 전사록입니다. 교수님이 전공 개념과 이론을 설명하고, 과제와 시험 일정을 안내합니다.";
 const DOWNLOAD_CHUNK_BYTES: usize = 256 * 1024;
 const PROGRESS_EVENT_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_REDIRECTS: u32 = 5;
@@ -229,7 +231,9 @@ fn load_context(state: &mut SttState, model: &Path) -> Result<(), AppError> {
     if state.context.is_some() && state.loaded_model.as_deref() == Some(model) {
         return Ok(());
     }
-    let context = WhisperContext::new_with_params(model, WhisperContextParameters::default())
+    let mut context_params = WhisperContextParameters::default();
+    context_params.use_gpu(true);
+    let context = WhisperContext::new_with_params(model, context_params)
         .map_err(|e| AppError::Model(e.to_string()))?;
     state.context = Some(context);
     state.loaded_model = Some(model.to_path_buf());
@@ -259,6 +263,9 @@ pub fn transcribe(
         params.set_detect_language(true);
     } else {
         params.set_language(Some(language));
+    }
+    if language == "ko" {
+        params.set_initial_prompt(KO_INITIAL_PROMPT);
     }
     params.set_print_special(false);
     params.set_print_progress(false);
@@ -324,7 +331,26 @@ pub fn transcribe(
 
 #[cfg(test)]
 mod tests {
-    use super::{DownloadEvent, SttEvent};
+    use super::{model_path, model_url, DownloadEvent, SttEvent, SUPPORTED_MODELS};
+    use std::path::Path;
+
+    #[test]
+    fn turbo_model_is_supported_and_maps_to_expected_file() {
+        assert!(SUPPORTED_MODELS.contains(&"large-v3-turbo"));
+        let path = model_path(Path::new("/models"), "large-v3-turbo")
+            .expect("turbo model should be accepted");
+        assert_eq!(path, Path::new("/models/ggml-large-v3-turbo.bin"));
+        assert_eq!(
+            model_url("large-v3-turbo").expect("turbo url"),
+            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin"
+        );
+    }
+
+    #[test]
+    fn unsupported_model_is_rejected() {
+        assert!(model_path(Path::new("/models"), "tiny").is_err());
+        assert!(model_url("tiny").is_err());
+    }
 
     #[test]
     fn download_progress_event_matches_frontend_schema() -> Result<(), serde_json::Error> {

@@ -89,7 +89,7 @@ export const ModelStatusSchema = z.object({
 });
 export type ModelStatus = z.infer<typeof ModelStatusSchema>;
 
-export const WHISPER_MODELS = ["medium", "large-v3"] as const;
+export const WHISPER_MODELS = ["medium", "large-v3", "large-v3-turbo"] as const;
 
 export const SettingsSchema = z.object({
   openaiApiKey: z.string().default(""),
