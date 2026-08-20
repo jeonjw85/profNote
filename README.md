@@ -45,18 +45,11 @@ npm run tauri dev
 
 ### 화자 분리 설정 (선택)
 
-```bash
-python3 -m venv .venv-diarize
-.venv-diarize/bin/pip install pyannote.audio
-```
+릴리즈 앱은 Python을 따로 설치할 필요가 없습니다. 설정에서 **화자 분리 엔진 설치**를 누르면 런타임과 pyannote를 앱 데이터 디렉터리에 받습니다. 최초 설치는 torch 때문에 수 분~수십 분, 수 GB가 필요할 수 있습니다.
 
-설정에서 다음 값을 입력합니다:
+추가로 HuggingFace 토큰이 필요합니다. [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1) 사용 조건에 먼저 동의하세요.
 
-- Python 실행 파일: `.venv-diarize/bin/python` (절대 경로)
-- 다이어라이제이션 스크립트: `scripts/diarize.py`
-- HuggingFace 토큰: [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1) 모델 사용 조건에 먼저 동의해야 합니다
-
-화자 분리가 켜져 있으면 가장 오래 말한 화자를 교수님으로 자동 추천하고, 에디터 상단에서 다른 화자로 바꿀 수 있습니다.
+화자 분리가 켜져 있고 엔진·토큰이 준비되면, 가장 오래 말한 화자를 교수님으로 자동 추천하고 에디터 상단에서 다른 화자로 바꿀 수 있습니다. 엔진이 없으면 전사는 그대로 진행하고 화자 분리만 건너뜁니다.
 
 ### 설정 요약
 

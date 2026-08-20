@@ -1,6 +1,8 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { z } from "zod";
 import {
+  DiarizerPrepareEventSchema,
+  DiarizerStatusSchema,
   DownloadEventSchema,
   ModelStatusSchema,
   RecordingStartedSchema,
@@ -8,6 +10,8 @@ import {
   SpeakerSegmentSchema,
   SttEventSchema,
   TranscriptSchema,
+  type DiarizerPrepareEvent,
+  type DiarizerStatus,
   type DownloadEvent,
   type ModelStatus,
   type RecordingStarted,
@@ -42,17 +46,27 @@ export async function transcribeAudio(
 
 export async function runDiarization(
   wavPath: string,
-  pythonBin: string,
-  scriptPath: string,
   huggingFaceToken: string
 ): Promise<SpeakerSegment[]> {
   const segments = await invoke("run_diarization", {
     wavPath,
-    pythonBin,
-    scriptPath,
     hfToken: huggingFaceToken.length > 0 ? huggingFaceToken : null,
   });
   return z.array(SpeakerSegmentSchema).parse(segments);
+}
+
+export async function getDiarizerStatus(): Promise<DiarizerStatus> {
+  return DiarizerStatusSchema.parse(await invoke("get_diarizer_status"));
+}
+
+export async function prepareDiarizer(
+  onEvent: (event: DiarizerPrepareEvent) => void
+): Promise<void> {
+  const channel = new Channel<unknown>();
+  channel.onmessage = (message) => {
+    onEvent(DiarizerPrepareEventSchema.parse(message));
+  };
+  await invoke("prepare_diarizer", { force: true, onEvent: channel });
 }
 
 export async function getModelStatus(model: string): Promise<ModelStatus> {

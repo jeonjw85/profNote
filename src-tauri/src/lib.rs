@@ -137,31 +137,34 @@ fn get_model_status(
 }
 
 #[tauri::command]
+fn get_diarizer_status(
+    state: State<'_, AppState>,
+) -> sidecar::diarizer::DiarizerStatus {
+    sidecar::diarizer::status(&state.data_dir)
+}
+
+#[tauri::command]
+fn prepare_diarizer(
+    state: State<'_, AppState>,
+    force: bool,
+    on_event: Channel<sidecar::diarizer::DiarizerPrepareEvent>,
+) -> Result<(), AppError> {
+    sidecar::diarizer::prepare(&state.data_dir, &on_event, force)
+}
+
+#[tauri::command]
 fn run_diarization(
+    state: State<'_, AppState>,
     wav_path: String,
-    python_bin: String,
-    script_path: String,
     hf_token: Option<String>,
 ) -> Result<Vec<sidecar::diarizer::SpeakerSegment>, AppError> {
     let wav = PathBuf::from(&wav_path);
-    let python = PathBuf::from(&python_bin);
-    let script = PathBuf::from(&script_path);
     if !wav.exists() {
         return Err(AppError::InvalidInput(format!(
             "wav file not found: {wav_path}"
         )));
     }
-    if !python.exists() {
-        return Err(AppError::InvalidInput(format!(
-            "python binary not found: {python_bin}"
-        )));
-    }
-    if !script.exists() {
-        return Err(AppError::InvalidInput(format!(
-            "diarization script not found: {script_path}"
-        )));
-    }
-    sidecar::diarizer::run_diarization(&python, &script, &wav, hf_token.as_deref())
+    sidecar::diarizer::run_diarization(&state.data_dir, &wav, hf_token.as_deref())
 }
 
 #[tauri::command]
@@ -246,6 +249,8 @@ pub fn run() {
             transcribe_audio,
             download_model,
             get_model_status,
+            get_diarizer_status,
+            prepare_diarizer,
             run_diarization,
             stream_llm_chat,
             write_markdown,
