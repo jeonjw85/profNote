@@ -8,7 +8,12 @@ import { Toast } from "./components/Toast";
 import { useNotes } from "./hooks/useNotes";
 import { usePipeline, type PipelineStage } from "./hooks/usePipeline";
 import { useRecorder } from "./hooks/useRecorder";
-import { downloadModel, getModelStatus } from "./services/audio";
+import {
+    downloadModel,
+    getDiarizerStatus,
+    getModelStatus,
+    prepareDiarizer,
+} from "./services/audio";
 import { fetchSettings, saveSettings } from "./services/db";
 import { toMessage } from "./services/errors";
 import { checkForUpdate, installPendingUpdate } from "./services/updater";
@@ -25,8 +30,6 @@ const DEFAULT_SETTINGS: Settings = {
     llmModel: "",
     whisperModel: "medium",
     whisperLanguage: "ko",
-    diarizationPython: "",
-    diarizationScript: "",
     huggingFaceToken: "",
     enableDiarization: true,
     enableSummary: true,
@@ -71,6 +74,11 @@ export default function App() {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [modelInstalled, setModelInstalled] = useState<boolean | null>(null);
     const [download, setDownload] = useState<DownloadProgress | null>(null);
+    const [diarizerReady, setDiarizerReady] = useState(false);
+    const [diarizerInstalling, setDiarizerInstalling] = useState(false);
+    const [diarizerProgress, setDiarizerProgress] = useState<string | null>(
+        null,
+    );
     const [appError, setAppError] = useState<string | null>(null);
     const [update, setUpdate] = useState<UpdateState>(null);
 
@@ -104,6 +112,9 @@ export default function App() {
         getModelStatus(settings.whisperModel)
             .then((status) => setModelInstalled(status.installed))
             .catch((caught) => setAppError(toMessage(caught)));
+        getDiarizerStatus()
+            .then((status) => setDiarizerReady(status.ready))
+            .catch((caught) => setAppError(toMessage(caught)));
     }, [settings]);
 
     const handleDownloadModel = useCallback(async () => {
@@ -132,6 +143,42 @@ export default function App() {
         await saveSettings(next);
         setSettings(next);
     }, []);
+
+    const handleInstallDiarizer = useCallback(async () => {
+        if (diarizerInstalling) {
+            return;
+        }
+        setDiarizerInstalling(true);
+        setDiarizerProgress("엔진 설치 중");
+        try {
+            await prepareDiarizer((event) => {
+                if (event.type === "stage") {
+                    setDiarizerProgress(
+                        event.name === "uv"
+                            ? "런타임 다운로드 중"
+                            : "화자 분리 엔진 설치 중",
+                    );
+                } else if (event.type === "progress") {
+                    if (event.totalBytes === null) {
+                        return;
+                    }
+                    const percent = Math.min(
+                        100,
+                        Math.round(
+                            (event.downloadedBytes / event.totalBytes) * 100,
+                        ),
+                    );
+                    setDiarizerProgress(`런타임 다운로드 중 ${percent}%`);
+                }
+            });
+            setDiarizerReady(true);
+        } catch (caught) {
+            setAppError(toMessage(caught));
+        } finally {
+            setDiarizerInstalling(false);
+            setDiarizerProgress(null);
+        }
+    }, [diarizerInstalling]);
 
     const handleInstallUpdate = useCallback(async () => {
         setUpdate({ status: "installing", percent: null });
@@ -262,6 +309,10 @@ export default function App() {
                     settings={settings}
                     onSave={handleSaveSettings}
                     onClose={() => setSettingsOpen(false)}
+                    diarizerReady={diarizerReady}
+                    diarizerInstalling={diarizerInstalling}
+                    diarizerProgress={diarizerProgress}
+                    onInstallDiarizer={() => void handleInstallDiarizer()}
                 />
             )}
             {toast && (

@@ -155,6 +155,34 @@
   cursor: default;
 }
 
+.hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.secondary {
+  align-self: flex-start;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font-size: 13px;
+  padding: 7px 16px;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.secondary:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.secondary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .primary {
   background: var(--color-text);
   color: var(--color-bg);

@@ -1,5 +1,10 @@
 import { useCallback, useState } from "react";
-import { runDiarization, transcribeAudio, writeMarkdown } from "../services/audio";
+import {
+  getDiarizerStatus,
+  runDiarization,
+  transcribeAudio,
+  writeMarkdown,
+} from "../services/audio";
 import { insertNote, updateNoteFields } from "../services/db";
 import { toMessage } from "../services/errors";
 import { summarizeTranscript } from "../services/openai";
@@ -56,28 +61,33 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
 
         let speakers: SpeakerSegment[] = [];
         if (settings.enableDiarization) {
-          if (settings.diarizationPython.trim() && settings.diarizationScript.trim()) {
-            setPipeline({
-              noteId: id,
-              stage: "diarizing",
-              percent: null,
-              charsReceived: null,
-            });
-            try {
-              speakers = await runDiarization(
-                capture.wavPath,
-                settings.diarizationPython.trim(),
-                settings.diarizationScript.trim(),
-                settings.huggingFaceToken
-              );
-            } catch (caught) {
-              console.warn("diarization skipped:", toMessage(caught));
-              setWarning(`화자 분리를 건너뛰었습니다: ${toMessage(caught)}`);
-            }
-          } else {
+          if (!settings.huggingFaceToken.trim()) {
             setWarning(
-              "화자 분리가 설정되지 않아 건너뛰었습니다. 설정에서 Python 실행 파일과 스크립트 경로를 지정하세요."
+              "화자 분리를 건너뛰었습니다. 설정에서 HuggingFace 토큰을 입력하세요."
             );
+          } else {
+            const engine = await getDiarizerStatus();
+            if (!engine.ready) {
+              setWarning(
+                "화자 분리 엔진이 없어 건너뛰었습니다. 설정에서 엔진을 설치하세요."
+              );
+            } else {
+              setPipeline({
+                noteId: id,
+                stage: "diarizing",
+                percent: null,
+                charsReceived: null,
+              });
+              try {
+                speakers = await runDiarization(
+                  capture.wavPath,
+                  settings.huggingFaceToken.trim()
+                );
+              } catch (caught) {
+                console.warn("diarization skipped:", toMessage(caught));
+                setWarning(`화자 분리를 건너뛰었습니다: ${toMessage(caught)}`);
+              }
+            }
           }
         }
 

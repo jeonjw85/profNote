@@ -7,12 +7,20 @@ interface SettingsModalProps {
     settings: Settings;
     onSave: (settings: Settings) => Promise<void>;
     onClose: () => void;
+    diarizerReady: boolean;
+    diarizerInstalling: boolean;
+    diarizerProgress: string | null;
+    onInstallDiarizer: () => void;
 }
 
 export function SettingsModal({
     settings,
     onSave,
     onClose,
+    diarizerReady,
+    diarizerInstalling,
+    diarizerProgress,
+    onInstallDiarizer,
 }: SettingsModalProps) {
     const [draft, setDraft] = useState<Settings>(settings);
     const [saving, setSaving] = useState(false);
@@ -147,36 +155,27 @@ export function SettingsModal({
                                 : `${styles.stack} ${styles.dimmed}`
                         }
                     >
+                        <p className={styles.hint}>
+                            {diarizerReady
+                                ? "화자 분리 엔진이 설치되어 있습니다."
+                                : "엔진 설치 시 Python·torch를 받아 최초 한 번 수 분 걸릴 수 있습니다."}
+                        </p>
+                        <button
+                            type="button"
+                            className={styles.secondary}
+                            onClick={onInstallDiarizer}
+                            disabled={
+                                diarizerInstalling || !draft.enableDiarization
+                            }
+                        >
+                            {diarizerInstalling
+                                ? (diarizerProgress ?? "엔진 설치 중")
+                                : diarizerReady
+                                  ? "엔진 다시 설치"
+                                  : "화자 분리 엔진 설치"}
+                        </button>
                         <label className={styles.field}>
-                            <span>
-                                Python 실행 파일 (다이어라이제이션, 선택)
-                            </span>
-                            <input
-                                value={draft.diarizationPython}
-                                onChange={(event) =>
-                                    update(
-                                        "diarizationPython",
-                                        event.target.value,
-                                    )
-                                }
-                                placeholder="예: /usr/local/bin/python3"
-                            />
-                        </label>
-                        <label className={styles.field}>
-                            <span>다이어라이제이션 스크립트 경로 (선택)</span>
-                            <input
-                                value={draft.diarizationScript}
-                                onChange={(event) =>
-                                    update(
-                                        "diarizationScript",
-                                        event.target.value,
-                                    )
-                                }
-                                placeholder="예: scripts/diarize.py"
-                            />
-                        </label>
-                        <label className={styles.field}>
-                            <span>HuggingFace 토큰 (선택)</span>
+                            <span>HuggingFace 토큰</span>
                             <input
                                 type="password"
                                 value={draft.huggingFaceToken}

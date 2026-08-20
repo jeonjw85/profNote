@@ -89,6 +89,24 @@ export const ModelStatusSchema = z.object({
 });
 export type ModelStatus = z.infer<typeof ModelStatusSchema>;
 
+export const DiarizerStatusSchema = z.object({
+  ready: z.boolean(),
+  uvInstalled: z.boolean(),
+  engineInstalled: z.boolean(),
+});
+export type DiarizerStatus = z.infer<typeof DiarizerStatusSchema>;
+
+export const DiarizerPrepareEventSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("stage"), name: z.string() }),
+  z.object({
+    type: z.literal("progress"),
+    downloadedBytes: z.number(),
+    totalBytes: z.number().nullable(),
+  }),
+  z.object({ type: z.literal("done") }),
+]);
+export type DiarizerPrepareEvent = z.infer<typeof DiarizerPrepareEventSchema>;
+
 export const WHISPER_MODELS = ["medium", "large-v3", "large-v3-turbo"] as const;
 
 export const SettingsSchema = z.object({
@@ -97,8 +115,6 @@ export const SettingsSchema = z.object({
   llmModel: z.string().default(""),
   whisperModel: z.enum(WHISPER_MODELS).default("medium"),
   whisperLanguage: z.string().default("ko"),
-  diarizationPython: z.string().default(""),
-  diarizationScript: z.string().default(""),
   huggingFaceToken: z.string().default(""),
   enableDiarization: z.boolean().default(true),
   enableSummary: z.boolean().default(true),
