@@ -91,15 +91,18 @@ cargo clippy --manifest-path src-tauri/Cargo.toml
 녹음, 모델, 노트, SQLite DB는 앱 데이터 디렉터리(`~/Library/Application Support/kr.jjw.profNote/`)에 저장됩니다.  
 전사는 로컬에서만 수행되며, 요약 시 전사 텍스트만 설정된 LLM API로 전송됩니다.
 
-## 릴리즈 macOS에서 열기 (서명되지 않은 앱)
+## 릴리즈 macOS에서 열기 (ad-hoc 서명 앱)
 
-이 앱은 Apple Developer ID로 서명되지 않았습니다.  
-브라우저로 받은 설치 파일을 처음 열면 `'profNote.app'은(는) 손상되었기 때문에 열 수 없습니다`라는 메시지가 나올 수 있는데 실제 손상이 아니라 macOS가 서명되지 않은 앱을 차단합니다.
+이 앱은 Apple Developer ID가 아닌 **ad-hoc 서명**되어 있습니다.  
+브라우저로 받은 설치 파일을 처음 열면 Developer ID 서명이 아니라는 이유로 `"확인되지 않은 개발자"` 안내가 뜹니다. 실제 손상이 아니니 아래 중 하나로 열면 됩니다.
 
-터미널에서 아래 명령 실행(1회):
+- Finder에서 `profNote.app`을 **우클릭(⌃-클릭) → 열기**, 또는
+- **시스템 설정 → 개인정보 보호 및 보안** → 하단의 **"열기 그래도"** 클릭
 
-```bash
-xattr -cr /Applications/profNote.app
-```
+확인 대화상자에서 열기를 확정하면 이후부터는 정상적으로 열립니다.
 
-이후에는 정상적으로 열립니다.
+> 혹시 `"손상되었기 때문에 열 수 없습니다"`라는 메시지가 뜬다면 터미널에서 아래 명령을 1회 실행하세요.
+>
+> ```bash
+> xattr -cr /Applications/profNote.app
+> ```
