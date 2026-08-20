@@ -75,8 +75,6 @@ npm run tauri build
 
 경로 : `src-tauri/target/release/bundle/`에 생성됩니다
 
-Windows 버전은 macOS에서 빌드할 수 없습니다. `tauri.conf.json`의 `version`과 같은 버전 태그(예: `v0.1.0`)를 push하면 GitHub Actions가 Windows 설치 파일을 빌드해 Release 초안으로 첨부합니다.
-
 ## 검증
 
 ```bash
@@ -96,8 +94,7 @@ cargo clippy --manifest-path src-tauri/Cargo.toml
 이 앱은 Apple Developer ID가 아닌 **ad-hoc 서명**되어 있습니다.  
 브라우저로 받은 설치 파일을 처음 열면 Developer ID 서명이 아니라는 이유로 `"확인되지 않은 개발자"` 안내가 뜹니다. 실제 손상이 아니니 아래 중 하나로 열면 됩니다.
 
-- Finder에서 `profNote.app`을 **우클릭(⌃-클릭) → 열기**, 또는
-- **시스템 설정 → 개인정보 보호 및 보안** → 하단의 **"열기 그래도"** 클릭
+- **시스템 설정 → 개인정보 보호 및 보안** → 하단의 **"그래도 열기"** 클릭
 
 확인 대화상자에서 열기를 확정하면 이후부터는 정상적으로 열립니다.
 
