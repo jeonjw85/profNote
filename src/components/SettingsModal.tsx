@@ -1,7 +1,19 @@
 import { useState } from "react";
 import styles from "./SettingsModal.module.css";
+import { useI18n } from "../i18n/context";
 import { toMessage } from "../services/errors";
-import { WHISPER_MODELS, type Settings } from "../types";
+import {
+    SUMMARY_LANGUAGES,
+    WHISPER_MODELS,
+    type Settings,
+    type SummaryLanguage,
+} from "../types";
+
+const SUMMARY_LANGUAGE_LABEL: Record<SummaryLanguage, string> = {
+    auto: "settings.summaryAuto",
+    ko: "settings.summaryKo",
+    en: "settings.summaryEn",
+};
 
 interface SettingsModalProps {
     settings: Settings;
@@ -22,6 +34,7 @@ export function SettingsModal({
     diarizerProgress,
     onInstallDiarizer,
 }: SettingsModalProps) {
+    const { t } = useI18n();
     const [draft, setDraft] = useState<Settings>(settings);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -49,7 +62,22 @@ export function SettingsModal({
                 className={styles.modal}
                 onClick={(event) => event.stopPropagation()}
             >
-                <h2 className={styles.title}>설정</h2>
+                <h2 className={styles.title}>{t("settings.title")}</h2>
+                <label className={styles.field}>
+                    <span>{t("settings.uiLanguage")}</span>
+                    <select
+                        value={draft.uiLanguage}
+                        onChange={(event) =>
+                            update(
+                                "uiLanguage",
+                                event.target.value === "en" ? "en" : "ko",
+                            )
+                        }
+                    >
+                        <option value="ko">{t("settings.uiLanguage.ko")}</option>
+                        <option value="en">{t("settings.uiLanguage.en")}</option>
+                    </select>
+                </label>
                 <div className={styles.group}>
                     <label className={styles.toggle}>
                         <input
@@ -59,7 +87,7 @@ export function SettingsModal({
                                 update("enableSummary", event.target.checked)
                             }
                         />
-                        <span>AI 요약 사용</span>
+                        <span>{t("settings.enableSummary")}</span>
                     </label>
                     <div
                         className={
@@ -69,35 +97,61 @@ export function SettingsModal({
                         }
                     >
                         <label className={styles.field}>
-                            <span>LLM API 키 (OpenAI 호환)</span>
+                            <span>{t("settings.summaryLanguage")}</span>
+                            <select
+                                value={draft.summaryLanguage}
+                                onChange={(event) => {
+                                    const value = event.target.value;
+                                    if (
+                                        value === "auto" ||
+                                        value === "ko" ||
+                                        value === "en"
+                                    ) {
+                                        update("summaryLanguage", value);
+                                    }
+                                }}
+                            >
+                                {SUMMARY_LANGUAGES.map((language) => (
+                                    <option key={language} value={language}>
+                                        {t(SUMMARY_LANGUAGE_LABEL[language])}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        <label className={styles.field}>
+                            <span>{t("settings.apiKey")}</span>
                             <input
                                 type="password"
                                 value={draft.openaiApiKey}
                                 onChange={(event) =>
                                     update("openaiApiKey", event.target.value)
                                 }
-                                placeholder="API 키 또는 Base URL이 없으면 요약을 건너뜁니다"
+                                placeholder={t("settings.apiKey.placeholder")}
                             />
                         </label>
                         <div className={styles.row}>
                             <label className={styles.field}>
-                                <span>API Base URL (선택)</span>
+                                <span>{t("settings.baseUrl")}</span>
                                 <input
                                     value={draft.llmBaseUrl}
                                     onChange={(event) =>
                                         update("llmBaseUrl", event.target.value)
                                     }
-                                    placeholder="기본: https://api.openai.com/v1"
+                                    placeholder={t(
+                                        "settings.baseUrl.placeholder",
+                                    )}
                                 />
                             </label>
                             <label className={styles.field}>
-                                <span>모델명 (선택)</span>
+                                <span>{t("settings.llmModel")}</span>
                                 <input
                                     value={draft.llmModel}
                                     onChange={(event) =>
                                         update("llmModel", event.target.value)
                                     }
-                                    placeholder="기본: gpt-4o"
+                                    placeholder={t(
+                                        "settings.llmModel.placeholder",
+                                    )}
                                 />
                             </label>
                         </div>
@@ -105,7 +159,7 @@ export function SettingsModal({
                 </div>
                 <div className={styles.row}>
                     <label className={styles.field}>
-                        <span>Whisper 모델</span>
+                        <span>{t("settings.whisperModel")}</span>
                         <select
                             value={draft.whisperModel}
                             onChange={(event) =>
@@ -124,13 +178,15 @@ export function SettingsModal({
                         </select>
                     </label>
                     <label className={styles.field}>
-                        <span>전사 언어</span>
+                        <span>{t("settings.whisperLanguage")}</span>
                         <input
                             value={draft.whisperLanguage}
                             onChange={(event) =>
                                 update("whisperLanguage", event.target.value)
                             }
-                            placeholder="ko / en / auto"
+                            placeholder={t(
+                                "settings.whisperLanguage.placeholder",
+                            )}
                         />
                     </label>
                 </div>
@@ -146,7 +202,7 @@ export function SettingsModal({
                                 )
                             }
                         />
-                        <span>화자 분리 사용</span>
+                        <span>{t("settings.enableDiarization")}</span>
                     </label>
                     <div
                         className={
@@ -157,8 +213,8 @@ export function SettingsModal({
                     >
                         <p className={styles.hint}>
                             {diarizerReady
-                                ? "화자 분리 엔진이 설치되어 있습니다."
-                                : "엔진 설치 시 Python·torch를 받아 최초 한 번 수 분 걸릴 수 있습니다."}
+                                ? t("settings.diarizer.hint.ready")
+                                : t("settings.diarizer.hint.missing")}
                         </p>
                         <button
                             type="button"
@@ -169,13 +225,14 @@ export function SettingsModal({
                             }
                         >
                             {diarizerInstalling
-                                ? (diarizerProgress ?? "엔진 설치 중")
+                                ? (diarizerProgress ??
+                                  t("settings.diarizer.installing"))
                                 : diarizerReady
-                                  ? "엔진 다시 설치"
-                                  : "화자 분리 엔진 설치"}
+                                  ? t("settings.diarizer.reinstall")
+                                  : t("settings.diarizer.install")}
                         </button>
                         <label className={styles.field}>
-                            <span>HuggingFace 토큰</span>
+                            <span>{t("settings.hfToken")}</span>
                             <input
                                 type="password"
                                 value={draft.huggingFaceToken}
@@ -185,7 +242,7 @@ export function SettingsModal({
                                         event.target.value,
                                     )
                                 }
-                                placeholder="pyannote 모델 접근용"
+                                placeholder={t("settings.hfToken.placeholder")}
                             />
                         </label>
                     </div>
@@ -193,7 +250,7 @@ export function SettingsModal({
                 {error && <p className={styles.error}>{error}</p>}
                 <div className={styles.actions}>
                     <button type="button" onClick={onClose} disabled={saving}>
-                        취소
+                        {t("settings.cancel")}
                     </button>
                     <button
                         type="button"
@@ -201,7 +258,7 @@ export function SettingsModal({
                         onClick={() => void handleSave()}
                         disabled={saving}
                     >
-                        {saving ? "저장 중" : "저장"}
+                        {saving ? t("settings.saving") : t("settings.save")}
                     </button>
                 </div>
             </div>

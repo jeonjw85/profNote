@@ -1,6 +1,15 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { z } from "zod";
+import type { SummaryLanguage } from "../types";
 import { toMessage } from "./errors";
+import {
+  chunkSystemPrompt,
+  chunkUserContent,
+  combinePartHeading,
+  combineSystemPrompt,
+  systemPrompt,
+  truncationMarker,
+} from "./summaryPrompts";
 
 const DEFAULT_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_MODEL = "gpt-4o";
@@ -8,30 +17,6 @@ const MAX_ATTEMPTS = 5;
 const BASE_DELAY_MS = 1000;
 const MAX_TRANSCRIPT_CHARS = 360_000;
 const CHUNK_CHARS = 30_000;
-
-const OUTPUT_FORMAT =
-  "출력 형식: '## 핵심 요약' (3~5문장), '## 주요 내용' (계층 불릿), '## 핵심 용어' (용어/정의 표), 필요 시 '## 과제 및 참고 사항'.";
-
-const SYSTEM_PROMPT = [
-  "당신은 강의 녹음 전사록을 정리하는 어시스턴트입니다.",
-  "입력된 전사록을 읽고 한국어 Markdown 강의 노트로 요약하세요.",
-  OUTPUT_FORMAT,
-  "전사록에 없는 내용은 지어내지 마세요. Markdown 본문만 출력하세요.",
-].join(" ");
-
-const CHUNK_SYSTEM_PROMPT = [
-  "당신은 강의 녹음 전사록을 정리하는 어시스턴트입니다.",
-  "입력된 전사록 일부를 읽고 한국어 Markdown으로 상세히 요약하세요.",
-  "핵심 내용, 용어와 정의, 과제 및 공지 사항을 빠짐없이 담으세요.",
-  "전사록에 없는 내용은 지어내지 마세요. Markdown 본문만 출력하세요.",
-].join(" ");
-
-const COMBINE_SYSTEM_PROMPT = [
-  "당신은 강의 녹음 전사록을 정리하는 어시스턴트입니다.",
-  "입력된 부분 요약들을 강의 순서대로 합쳐 하나의 한국어 Markdown 강의 노트로 정리하세요.",
-  OUTPUT_FORMAT,
-  "입력에 없는 내용은 지어내지 마세요. 중복을 제거하고 Markdown 본문만 출력하세요.",
-].join(" ");
 
 export class ApiError extends Error {
   readonly retryable: boolean;
@@ -104,18 +89,19 @@ export async function summarizeTranscript(
   apiKey: string,
   endpoint: LlmEndpoint,
   transcript: string,
+  language: SummaryLanguage,
   onProgress?: (receivedChars: number) => void
 ): Promise<string> {
   const trimmed =
     transcript.length > MAX_TRANSCRIPT_CHARS
-      ? `${transcript.slice(0, MAX_TRANSCRIPT_CHARS)}\n[이하 생략]`
+      ? `${transcript.slice(0, MAX_TRANSCRIPT_CHARS)}\n${truncationMarker(language)}`
       : transcript;
   const url = buildEndpoint(endpoint.baseUrl);
   const model = endpoint.model.trim() || DEFAULT_MODEL;
   const chunks = splitTranscript(trimmed);
   if (chunks.length <= 1) {
     return withRetry(() =>
-      requestChat(apiKey, url, model, SYSTEM_PROMPT, trimmed, onProgress)
+      requestChat(apiKey, url, model, systemPrompt(language), trimmed, onProgress)
     );
   }
   let received = 0;
@@ -126,8 +112,8 @@ export async function summarizeTranscript(
         apiKey,
         url,
         model,
-        CHUNK_SYSTEM_PROMPT,
-        `전사록 일부 ${index + 1}/${chunks.length}:\n\n${chunk}`,
+        chunkSystemPrompt(language),
+        chunkUserContent(language, index + 1, chunks.length, chunk),
         (chars) => onProgress?.(received + chars)
       )
     );
@@ -136,14 +122,14 @@ export async function summarizeTranscript(
     onProgress?.(received);
   }
   const combinedInput = parts
-    .map((part, index) => `## 부분 요약 ${index + 1}\n\n${part}`)
+    .map((part, index) => `${combinePartHeading(language, index + 1)}\n\n${part}`)
     .join("\n\n");
   return withRetry(() =>
     requestChat(
       apiKey,
       url,
       model,
-      COMBINE_SYSTEM_PROMPT,
+      combineSystemPrompt(language),
       combinedInput,
       (chars) => onProgress?.(received + chars)
     )

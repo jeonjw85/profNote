@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import styles from "./NoteList.module.css";
+import { useI18n } from "../i18n/context";
 import type { Note, NoteStatus } from "../types";
 
 interface NoteListProps {
@@ -8,13 +9,23 @@ interface NoteListProps {
   onSelect: (id: string) => void;
 }
 
-const STATUS_LABEL: Record<NoteStatus, string | null> = {
-  recording: "녹음 중",
-  transcribing: "전사 중",
-  summarizing: "요약 중",
-  ready: null,
-  error: "오류",
-};
+function statusLabel(
+  status: NoteStatus,
+  t: (key: string) => string,
+): string | null {
+  switch (status) {
+    case "recording":
+      return t("notes.status.recording");
+    case "transcribing":
+      return t("notes.status.transcribing");
+    case "summarizing":
+      return t("notes.status.summarizing");
+    case "ready":
+      return null;
+    case "error":
+      return t("notes.status.error");
+  }
+}
 
 function formatCreated(iso: string): string {
   const date = new Date(iso);
@@ -26,6 +37,7 @@ function formatCreated(iso: string): string {
 }
 
 export function NoteList({ notes, selectedId, onSelect }: NoteListProps) {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
@@ -42,7 +54,7 @@ export function NoteList({ notes, selectedId, onSelect }: NoteListProps) {
   }, [notes, query]);
 
   if (notes.length === 0) {
-    return <p className={styles.empty}>아직 노트가 없습니다. 아래 녹음 버튼으로 시작하세요.</p>;
+    return <p className={styles.empty}>{t("notes.empty")}</p>;
   }
 
   return (
@@ -52,29 +64,30 @@ export function NoteList({ notes, selectedId, onSelect }: NoteListProps) {
         className={styles.search}
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        aria-label="노트 검색"
-        placeholder="노트 검색"
+        aria-label={t("notes.search")}
+        placeholder={t("notes.search")}
       />
       {filtered.length === 0 ? (
-        <p className={styles.empty}>검색 결과가 없습니다</p>
+        <p className={styles.empty}>{t("notes.noResults")}</p>
       ) : (
         <nav className={styles.list}>
-          {filtered.map((note) => (
-            <button
-              key={note.id}
-              type="button"
-              className={`${styles.item} ${note.id === selectedId ? styles.selected : ""}`}
-              onClick={() => onSelect(note.id)}
-            >
-              <span className={styles.title}>{note.title}</span>
-              <span className={styles.meta}>
-                <time>{formatCreated(note.created_at)}</time>
-                {STATUS_LABEL[note.status] && (
-                  <em className={styles.status}>{STATUS_LABEL[note.status]}</em>
-                )}
-              </span>
-            </button>
-          ))}
+          {filtered.map((note) => {
+            const label = statusLabel(note.status, t);
+            return (
+              <button
+                key={note.id}
+                type="button"
+                className={`${styles.item} ${note.id === selectedId ? styles.selected : ""}`}
+                onClick={() => onSelect(note.id)}
+              >
+                <span className={styles.title}>{note.title}</span>
+                <span className={styles.meta}>
+                  <time>{formatCreated(note.created_at)}</time>
+                  {label && <em className={styles.status}>{label}</em>}
+                </span>
+              </button>
+            );
+          })}
         </nav>
       )}
     </>

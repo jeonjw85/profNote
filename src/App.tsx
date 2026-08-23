@@ -9,6 +9,8 @@ import { Toast } from "./components/Toast";
 import { useNotes } from "./hooks/useNotes";
 import { usePipeline, type PipelineStage } from "./hooks/usePipeline";
 import { useRecorder } from "./hooks/useRecorder";
+import { I18nProvider } from "./i18n";
+import { useI18n } from "./i18n/context";
 import {
     downloadModel,
     fileNameWithoutExtension,
@@ -37,12 +39,8 @@ const DEFAULT_SETTINGS: Settings = {
     huggingFaceToken: "",
     enableDiarization: true,
     enableSummary: true,
-};
-
-const STAGE_TEXT: Record<PipelineStage, string> = {
-    diarizing: "화자 분리 단계 | 음성 길이에 따라 몇 분 걸릴 수 있어요",
-    transcribing: "로컬 전사 단계",
-    summarizing: "요약 생성 단계",
+    uiLanguage: "ko",
+    summaryLanguage: "auto",
 };
 
 function assertNever(value: never): never {
@@ -69,6 +67,23 @@ function GearIcon() {
 }
 
 export default function App() {
+    const [settings, setSettings] = useState<Settings | null>(null);
+
+    return (
+        <I18nProvider locale={settings?.uiLanguage ?? "ko"}>
+            <AppBody settings={settings} setSettings={setSettings} />
+        </I18nProvider>
+    );
+}
+
+function AppBody({
+    settings,
+    setSettings,
+}: {
+    settings: Settings | null;
+    setSettings: (next: Settings | null) => void;
+}) {
+    const { t } = useI18n();
     const {
         notes,
         selectedId,
@@ -78,7 +93,6 @@ export default function App() {
         patchNote,
         removeNote,
     } = useNotes();
-    const [settings, setSettings] = useState<Settings | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [modelInstalled, setModelInstalled] = useState<boolean | null>(null);
     const [download, setDownload] = useState<DownloadProgress | null>(null);
@@ -139,7 +153,7 @@ export default function App() {
                         }
                         const path = payload.paths.find(isImportableAudioPath);
                         if (path === undefined) {
-                            setAppError("지원하지 않는 오디오 형식입니다");
+                            setAppError(t("app.unsupportedAudio"));
                             return;
                         }
                         void (async () => {
@@ -172,13 +186,13 @@ export default function App() {
             cancelled = true;
             unlisten?.();
         };
-    }, []);
+    }, [t]);
 
     useEffect(() => {
         fetchSettings()
             .then(setSettings)
             .catch((caught) => setAppError(toMessage(caught)));
-    }, []);
+    }, [setSettings]);
 
     useEffect(() => {
         checkForUpdate()
@@ -224,24 +238,27 @@ export default function App() {
         }
     }, [settings, download]);
 
-    const handleSaveSettings = useCallback(async (next: Settings) => {
-        await saveSettings(next);
-        setSettings(next);
-    }, []);
+    const handleSaveSettings = useCallback(
+        async (next: Settings) => {
+            await saveSettings(next);
+            setSettings(next);
+        },
+        [setSettings],
+    );
 
     const handleInstallDiarizer = useCallback(async () => {
         if (diarizerInstalling) {
             return;
         }
         setDiarizerInstalling(true);
-        setDiarizerProgress("엔진 설치 중");
+        setDiarizerProgress(t("diarizer.installing"));
         try {
             await prepareDiarizer((event) => {
                 if (event.type === "stage") {
                     setDiarizerProgress(
                         event.name === "uv"
-                            ? "런타임 다운로드 중"
-                            : "화자 분리 엔진 설치 중",
+                            ? t("diarizer.runtime")
+                            : t("diarizer.engine"),
                     );
                 } else if (event.type === "progress") {
                     if (event.totalBytes === null) {
@@ -253,7 +270,9 @@ export default function App() {
                             (event.downloadedBytes / event.totalBytes) * 100,
                         ),
                     );
-                    setDiarizerProgress(`런타임 다운로드 중 ${percent}%`);
+                    setDiarizerProgress(
+                        t("diarizer.runtimePercent", { percent }),
+                    );
                 }
             });
             setDiarizerReady(true);
@@ -263,7 +282,7 @@ export default function App() {
             setDiarizerInstalling(false);
             setDiarizerProgress(null);
         }
-    }, [diarizerInstalling]);
+    }, [diarizerInstalling, t]);
 
     const handleInstallUpdate = useCallback(async () => {
         setUpdate({ status: "installing", percent: null });
@@ -286,11 +305,16 @@ export default function App() {
 
     if (!settings) {
         return (
-            <div className={styles.loading}>{appError ?? "불러오는 중"}</div>
+            <div className={styles.loading}>{appError ?? t("app.loading")}</div>
         );
     }
 
     const selectedNote = notes.find((note) => note.id === selectedId) ?? null;
+    const stageText: Record<PipelineStage, string> = {
+        diarizing: t("pipeline.diarizing"),
+        transcribing: t("pipeline.transcribing"),
+        summarizing: t("pipeline.summarizing"),
+    };
 
     let toast: {
         tone: "info" | "error";
@@ -317,16 +341,18 @@ export default function App() {
         if (stage === "transcribing") {
             suffix =
                 percent === null || percent === 0
-                    ? " (모델을 불러오는 중)"
+                    ? t("pipeline.suffix.loadingModel")
                     : ` ${percent}%`;
         } else if (stage === "summarizing" && charsReceived !== null) {
-            suffix = ` ${charsReceived.toLocaleString()}자`;
+            suffix = t("pipeline.suffix.chars", {
+                chars: charsReceived.toLocaleString(),
+            });
         }
-        toast = { tone: "info", text: `${STAGE_TEXT[stage]}${suffix}` };
+        toast = { tone: "info", text: `${stageText[stage]}${suffix}` };
     } else if (update?.status === "available") {
         toast = {
             tone: "info",
-            text: `v${update.version} 업데이트 가능 | 클릭해서 설치`,
+            text: t("update.available", { version: update.version }),
             dismiss: () => void handleInstallUpdate(),
         };
     } else if (update?.status === "installing") {
@@ -334,8 +360,8 @@ export default function App() {
             tone: "info",
             text:
                 update.percent === null
-                    ? "업데이트 다운로드 중"
-                    : `업데이트 설치 중 ${update.percent}%`,
+                    ? t("update.downloading")
+                    : t("update.installing", { percent: update.percent }),
         };
     }
 
@@ -348,7 +374,7 @@ export default function App() {
                         type="button"
                         className={styles.settingsButton}
                         onClick={() => setSettingsOpen(true)}
-                        aria-label="설정"
+                        aria-label={t("app.settings")}
                     >
                         <GearIcon />
                     </button>
@@ -390,10 +416,7 @@ export default function App() {
                     />
                 ) : (
                     <div className={styles.empty}>
-                        <p>
-                            강의를 녹음하면 전사와 요약이 자동으로 여기에
-                            표시됩니다
-                        </p>
+                        <p>{t("app.empty")}</p>
                     </div>
                 )}
             </main>
@@ -416,7 +439,7 @@ export default function App() {
             {dropActive && (
                 <div className={styles.dropOverlay} role="status">
                     <div className={styles.dropOverlayFrame}>
-                        오디오 파일을 놓아서 가져오기
+                        {t("app.drop")}
                     </div>
                 </div>
             )}

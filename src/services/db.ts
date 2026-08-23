@@ -1,6 +1,12 @@
 import Database from "@tauri-apps/plugin-sql";
 import { z } from "zod";
-import { NoteSchema, SettingsSchema, type Note, type Settings } from "../types";
+import {
+  NoteSchema,
+  SettingsSchema,
+  type Note,
+  type Settings,
+  type SummaryLanguage,
+} from "../types";
 
 const DATABASE_URL = "sqlite:profnote.db";
 
@@ -98,6 +104,13 @@ export async function recoverInterruptedNotes(): Promise<void> {
   );
 }
 
+function readSummaryLanguage(value: string | undefined): SummaryLanguage {
+  if (value === "ko" || value === "en") {
+    return value;
+  }
+  return "auto";
+}
+
 export async function fetchSettings(): Promise<Settings> {
   const db = await getConnection();
   const rows = await db.select<Array<{ key: string; value: string }>>(
@@ -113,6 +126,8 @@ export async function fetchSettings(): Promise<Settings> {
     huggingFaceToken: values.get("huggingface_token") ?? "",
     enableDiarization: values.get("enable_diarization") !== "0",
     enableSummary: values.get("enable_summary") !== "0",
+    uiLanguage: values.get("ui_language") === "en" ? "en" : "ko",
+    summaryLanguage: readSummaryLanguage(values.get("summary_language")),
   });
 }
 
@@ -127,6 +142,8 @@ export async function saveSettings(settings: Settings): Promise<void> {
     ["huggingface_token", settings.huggingFaceToken],
     ["enable_diarization", settings.enableDiarization ? "1" : "0"],
     ["enable_summary", settings.enableSummary ? "1" : "0"],
+    ["ui_language", settings.uiLanguage],
+    ["summary_language", settings.summaryLanguage],
   ];
   for (const [key, value] of entries) {
     await db.execute(

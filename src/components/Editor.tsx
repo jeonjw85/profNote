@@ -9,6 +9,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import styles from "./Editor.module.css";
+import { useI18n } from "../i18n/context";
 import {
     SpeakerDataSchema,
     type Note,
@@ -79,28 +80,24 @@ function parseSpeakerData(raw: string): SpeakerData | null {
     }
 }
 
-function bodyPlaceholder(status: NoteStatus, editingSummary: boolean): string {
+function bodyPlaceholder(
+    status: NoteStatus,
+    editingSummary: boolean,
+    t: (key: string) => string,
+): string {
     if (status === "transcribing") {
-        return "전사 중입니다 / 모델과 음성 길이에 따라 몇 분 걸릴 수 있어요";
+        return t("editor.placeholder.transcribing");
     }
     if (status === "summarizing") {
-        return "요약을 생성하는 중입니다";
+        return t("editor.placeholder.summarizing");
     }
     if (status === "error") {
-        return "처리 중 오류가 발생했습니다";
+        return t("editor.placeholder.error");
     }
     return editingSummary
-        ? "요약이 여기에 표시됩니다"
-        : "전사 내용이 여기에 표시됩니다";
+        ? t("editor.placeholder.summary")
+        : t("editor.placeholder.transcript");
 }
-
-const STATUS_TEXT: Record<NoteStatus, string> = {
-    recording: "녹음 중",
-    transcribing: "전사 중",
-    summarizing: "요약 중",
-    ready: "완료",
-    error: "처리 실패",
-};
 
 export function Editor({
     note,
@@ -110,6 +107,14 @@ export function Editor({
     regenerating,
     pipelineActive,
 }: EditorProps) {
+    const { t } = useI18n();
+    const statusText: Record<NoteStatus, string> = {
+        recording: t("editor.status.recording"),
+        transcribing: t("editor.status.transcribing"),
+        summarizing: t("editor.status.summarizing"),
+        ready: t("editor.status.ready"),
+        error: t("editor.status.error"),
+    };
     const [title, setTitle] = useState(note.title);
     const [summary, setSummary] = useState(note.summary_md);
     const [transcript, setTranscript] = useState(note.transcript);
@@ -290,19 +295,19 @@ export function Editor({
                     className={styles.titleInput}
                     value={title}
                     onChange={(event) => setTitle(event.target.value)}
-                    placeholder="제목 없는 강의"
-                    aria-label="노트 제목"
+                    placeholder={t("editor.title.placeholder")}
+                    aria-label={t("editor.aria.title")}
                 />
                 <div className={styles.actions}>
                     {speakerOptions.length >= 2 && (
                         <label className={styles.speakerPicker}>
-                            교수님
+                            {t("editor.professor")}
                             <select
                                 value={professor ?? ""}
                                 onChange={(event) =>
                                     handleProfessorChange(event.target.value)
                                 }
-                                aria-label="교수님 화자 선택"
+                                aria-label={t("editor.aria.professor")}
                             >
                                 {speakerOptions.map((option) => (
                                     <option
@@ -317,13 +322,13 @@ export function Editor({
                         </label>
                     )}
                     <span className={styles.status} data-status={note.status}>
-                        {STATUS_TEXT[note.status]}
+                        {statusText[note.status]}
                     </span>
                     <button
                         type="button"
                         onClick={() => setPreview((value) => !value)}
                     >
-                        {preview ? "편집" : "미리보기"}
+                        {preview ? t("editor.edit") : t("editor.preview")}
                     </button>
                     {note.transcript.length > 0 && (
                         <button
@@ -335,7 +340,7 @@ export function Editor({
                             }
                             onClick={onRegenerateSummary}
                         >
-                            요약 재생성
+                            {t("editor.regenerate")}
                         </button>
                     )}
                     <button
@@ -344,7 +349,9 @@ export function Editor({
                         data-confirm={confirmingDelete || undefined}
                         onClick={handleDelete}
                     >
-                        {confirmingDelete ? "정말 삭제할까요?" : "삭제"}
+                        {confirmingDelete
+                            ? t("editor.delete.confirm")
+                            : t("editor.delete")}
                     </button>
                 </div>
             </header>
@@ -354,14 +361,14 @@ export function Editor({
                     data-active={tab === "transcript" || undefined}
                     onClick={() => setTab("transcript")}
                 >
-                    원문
+                    {t("editor.tab.transcript")}
                 </button>
                 <button
                     type="button"
                     data-active={tab === "summary" || undefined}
                     onClick={() => setTab("summary")}
                 >
-                    요약
+                    {t("editor.tab.summary")}
                 </button>
             </div>
             <div className={styles.body}>
@@ -374,7 +381,7 @@ export function Editor({
                                 </ReactMarkdown>
                             ) : (
                                 <p className={styles.placeholder}>
-                                    요약이 아직 없습니다.
+                                    {t("editor.empty.summary")}
                                 </p>
                             )}
                         </div>
@@ -418,7 +425,7 @@ export function Editor({
                                 </div>
                             ) : (
                                 <p className={styles.placeholder}>
-                                    전사 내용이 아직 없습니다.
+                                    {t("editor.empty.transcript")}
                                 </p>
                             )}
                         </div>
@@ -435,8 +442,9 @@ export function Editor({
                         placeholder={bodyPlaceholder(
                             note.status,
                             tab === "summary",
+                            t,
                         )}
-                        aria-label="노트 본문"
+                        aria-label={t("editor.aria.body")}
                     />
                 )}
             </div>
@@ -462,9 +470,11 @@ export function Editor({
                     <button
                         type="button"
                         onClick={handleTogglePlay}
-                        aria-label={playing ? "일시정지" : "재생"}
+                        aria-label={
+                            playing ? t("editor.pause") : t("editor.play")
+                        }
                     >
-                        {playing ? "일시정지" : "재생"}
+                        {playing ? t("editor.pause") : t("editor.play")}
                     </button>
                     <input
                         type="range"
@@ -475,7 +485,7 @@ export function Editor({
                         value={seekable ? currentTime : 0}
                         disabled={!seekable}
                         onChange={handleSeekBar}
-                        aria-label="재생 위치"
+                        aria-label={t("editor.aria.seek")}
                     />
                     <span className={styles.playerTime}>
                         {formatTimestamp(

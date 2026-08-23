@@ -109,6 +109,9 @@ export type DiarizerPrepareEvent = z.infer<typeof DiarizerPrepareEventSchema>;
 
 export const WHISPER_MODELS = ["medium", "large-v3", "large-v3-turbo"] as const;
 
+export const SUMMARY_LANGUAGES = ["auto", "ko", "en"] as const;
+export type SummaryLanguage = (typeof SUMMARY_LANGUAGES)[number];
+
 export const SettingsSchema = z.object({
   openaiApiKey: z.string().default(""),
   llmBaseUrl: z.string().default(""),
@@ -118,6 +121,8 @@ export const SettingsSchema = z.object({
   huggingFaceToken: z.string().default(""),
   enableDiarization: z.boolean().default(true),
   enableSummary: z.boolean().default(true),
+  uiLanguage: z.enum(["ko", "en"]).default("ko"),
+  summaryLanguage: z.enum(SUMMARY_LANGUAGES).default("auto"),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 

@@ -1,4 +1,20 @@
+import type { Locale } from "../i18n/context";
 import type { SpeakerSegment, TranscriptSegment } from "../types";
+
+const EN_MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
 
 const SPEAKER_MATCH_TOLERANCE_MS = 1500;
 
@@ -77,7 +93,12 @@ export function renderMarkdownDocument(title: string, summary: string): string {
   return `# ${title}\n\n${summary}\n`;
 }
 
-export function defaultNoteTitle(date: Date): string {
+export function defaultNoteTitle(date: Date, locale: Locale): string {
   const pad = (value: number) => value.toString().padStart(2, "0");
-  return `${date.getMonth() + 1}월 ${date.getDate()}일 강의 ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  if (locale === "en") {
+    const month = EN_MONTHS[date.getMonth()] ?? "Jan";
+    return `Lecture ${month} ${date.getDate()}, ${time}`;
+  }
+  return `${date.getMonth() + 1}월 ${date.getDate()}일 강의 ${time}`;
 }

@@ -1,4 +1,5 @@
 import styles from "./RecordBar.module.css";
+import { useI18n } from "../i18n/context";
 import { formatTimestamp } from "../services/transcript";
 import type { RecorderStatus } from "../hooks/useRecorder";
 import type { DownloadProgress } from "../types";
@@ -16,16 +17,19 @@ interface RecordBarProps {
     onDismissError: () => void;
 }
 
-function downloadLabel(progress: DownloadProgress): string {
+function downloadLabel(
+    progress: DownloadProgress,
+    t: (key: string, vars?: Record<string, string | number>) => string,
+): string {
     const downloadedMb = (progress.downloadedBytes / (1024 * 1024)).toFixed(0);
     if (progress.totalBytes === null) {
-        return `모델 다운로드 중 ${downloadedMb}MB`;
+        return t("record.download.mb", { mb: downloadedMb });
     }
     const percent = Math.min(
         100,
         Math.floor((progress.downloadedBytes / progress.totalBytes) * 100),
     );
-    return `모델 다운로드 중 ${percent}%`;
+    return t("record.download.percent", { percent });
 }
 
 export function RecordBar({
@@ -40,6 +44,7 @@ export function RecordBar({
     onDownloadModel,
     onDismissError,
 }: RecordBarProps) {
+    const { t } = useI18n();
     const recording = recorderStatus === "recording";
     const busy = recorderStatus === "stopping";
     return (
@@ -54,15 +59,15 @@ export function RecordBar({
                 </button>
             )}
             {download ? (
-                <p className={styles.hint}>{downloadLabel(download)}</p>
+                <p className={styles.hint}>{downloadLabel(download, t)}</p>
             ) : !modelReady ? (
                 <button
                     type="button"
                     className={styles.modelButton}
                     onClick={onDownloadModel}
                 >
-                    {modelName} 모델 다운로드 필요!
-                    <br /> 클릭하여 다운로드
+                    {t("record.download.needed", { model: modelName })}
+                    <br />{t("record.download.click")}
                 </button>
             ) : null}
             <div className={styles.controls}>
@@ -71,7 +76,7 @@ export function RecordBar({
                     className={`${styles.button} ${recording ? styles.recording : ""}`}
                     onClick={recording ? onStop : onStart}
                     disabled={busy || Boolean(download)}
-                    aria-label={recording ? "녹음 정지" : "녹음 시작"}
+                    aria-label={recording ? t("record.stop") : t("record.start")}
                 >
                     <span className={styles.dot} />
                 </button>
@@ -82,7 +87,11 @@ export function RecordBar({
                         </span>
                     )}
                     <span className={styles.statusText}>
-                        {busy ? "저장 중" : recording ? "녹음 중" : "녹음 대기"}
+                        {busy
+                            ? t("record.saving")
+                            : recording
+                              ? t("record.recording")
+                              : t("record.idle")}
                     </span>
                 </div>
             </div>

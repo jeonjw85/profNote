@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { useI18n } from "../i18n/context";
 import {
   getDiarizerStatus,
   runDiarization,
@@ -32,6 +33,7 @@ interface PipelineOptions {
 }
 
 export function usePipeline({ settings, onNotesChanged, onNoteCreated }: PipelineOptions) {
+  const { t } = useI18n();
   const [pipeline, setPipeline] = useState<PipelineState | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
@@ -44,7 +46,7 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
       const now = new Date().toISOString();
       const note: Note = {
         id,
-        title: titleHint?.trim() || defaultNoteTitle(new Date()),
+        title: titleHint?.trim() || defaultNoteTitle(new Date(), settings.uiLanguage),
         transcript: "",
         summary_md: "",
         audio_path: capture.wavPath,
@@ -62,15 +64,11 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
         let speakers: SpeakerSegment[] = [];
         if (settings.enableDiarization) {
           if (!settings.huggingFaceToken.trim()) {
-            setWarning(
-              "화자 분리를 건너뛰었습니다. 설정에서 HuggingFace 토큰을 입력하세요."
-            );
+            setWarning(t("pipeline.skip.token"));
           } else {
             const engine = await getDiarizerStatus();
             if (!engine.ready) {
-              setWarning(
-                "화자 분리 엔진이 없어 건너뛰었습니다. 설정에서 엔진을 설치하세요."
-              );
+              setWarning(t("pipeline.skip.engine"));
             } else {
               setPipeline({
                 noteId: id,
@@ -85,7 +83,9 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
                 );
               } catch (caught) {
                 console.warn("diarization skipped:", toMessage(caught));
-                setWarning(`화자 분리를 건너뛰었습니다: ${toMessage(caught)}`);
+                setWarning(
+                  t("pipeline.skip.reason", { reason: toMessage(caught) })
+                );
               }
             }
           }
@@ -146,6 +146,7 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
             settings.openaiApiKey.trim(),
             { baseUrl: settings.llmBaseUrl, model: settings.llmModel },
             transcriptText,
+            settings.summaryLanguage,
             (receivedChars) =>
               setPipeline({
                 noteId: id,
@@ -159,7 +160,9 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
           try {
             await writeMarkdown(`note_${id.slice(0, 8)}`, renderMarkdownDocument(note.title, summary));
           } catch (caught) {
-            setWarning(`Markdown 파일 저장에 실패했습니다: ${toMessage(caught)}`);
+            setWarning(
+              t("pipeline.markdownFail", { reason: toMessage(caught) })
+            );
           }
         }
         setPipeline(null);
@@ -174,7 +177,7 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
         }
       }
     },
-    [settings, onNotesChanged, onNoteCreated]
+    [settings, onNotesChanged, onNoteCreated, t]
   );
 
   const regenerateSummary = useCallback(
@@ -184,7 +187,7 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
       }
       if (note.transcript.length === 0) {
         setFailure(null);
-        setWarning("전사가 없어 요약을 재생성할 수 없습니다");
+        setWarning(t("pipeline.noTranscript"));
         return;
       }
       if (
@@ -192,7 +195,7 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
         settings.llmBaseUrl.trim().length === 0
       ) {
         setFailure(null);
-        setWarning("LLM API 키 또는 Base URL을 설정하세요");
+        setWarning(t("pipeline.noLlm"));
         return;
       }
 
@@ -211,6 +214,7 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
           settings.openaiApiKey.trim(),
           { baseUrl: settings.llmBaseUrl, model: settings.llmModel },
           note.transcript,
+          settings.summaryLanguage,
           (receivedChars) =>
             setPipeline({
               noteId: note.id,
@@ -227,7 +231,9 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
             renderMarkdownDocument(note.title, summary)
           );
         } catch (caught) {
-          setWarning(`Markdown 파일 저장에 실패했습니다: ${toMessage(caught)}`);
+          setWarning(
+            t("pipeline.markdownFail", { reason: toMessage(caught) })
+          );
         }
         setPipeline(null);
       } catch (caught) {
@@ -241,7 +247,7 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
         }
       }
     },
-    [pipeline, settings, onNotesChanged]
+    [pipeline, settings, onNotesChanged, t]
   );
 
   const clearFailure = useCallback(() => setFailure(null), []);
