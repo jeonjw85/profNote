@@ -1,7 +1,7 @@
 {
     "$schema": "https://schema.tauri.app/config/2",
     "productName": "profNote",
-    "version": "0.2.6",
+    "version": "0.3.0",
     "identifier": "kr.jjw.profNote",
     "build": {
         "beforeDevCommand": "npm run dev",
