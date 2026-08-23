@@ -41,7 +41,7 @@ const DEFAULT_SETTINGS: Settings = {
     huggingFaceToken: "",
     enableDiarization: true,
     enableSummary: true,
-    uiLanguage: "ko",
+    uiLanguage: "en",
     summaryLanguage: "auto",
 };
 
@@ -72,7 +72,7 @@ export default function App() {
     const [settings, setSettings] = useState<Settings | null>(null);
 
     return (
-        <I18nProvider locale={settings?.uiLanguage ?? "ko"}>
+        <I18nProvider locale={settings?.uiLanguage ?? "en"}>
             <AppBody settings={settings} setSettings={setSettings} />
         </I18nProvider>
     );

@@ -31,8 +31,8 @@ export function translate(
 }
 
 export const I18nContext = createContext<I18nValue>({
-  locale: "ko",
-  t: (key, vars) => translate("ko", key, vars),
+  locale: "en",
+  t: (key, vars) => translate("en", key, vars),
 });
 
 export function useI18n(): I18nValue {

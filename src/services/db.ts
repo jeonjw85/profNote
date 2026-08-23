@@ -126,7 +126,7 @@ export async function fetchSettings(): Promise<Settings> {
     huggingFaceToken: values.get("huggingface_token") ?? "",
     enableDiarization: values.get("enable_diarization") !== "0",
     enableSummary: values.get("enable_summary") !== "0",
-    uiLanguage: values.get("ui_language") === "en" ? "en" : "ko",
+    uiLanguage: values.get("ui_language") === "ko" ? "ko" : "en",
     summaryLanguage: readSummaryLanguage(values.get("summary_language")),
   });
 }

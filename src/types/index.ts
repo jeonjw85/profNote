@@ -124,7 +124,7 @@ export const SettingsSchema = z.object({
   huggingFaceToken: z.string().default(""),
   enableDiarization: z.boolean().default(true),
   enableSummary: z.boolean().default(true),
-  uiLanguage: z.enum(["ko", "en"]).default("ko"),
+  uiLanguage: z.enum(["ko", "en"]).default("en"),
   summaryLanguage: z.enum(SUMMARY_LANGUAGES).default("auto"),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
