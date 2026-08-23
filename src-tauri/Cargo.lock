@@ -3180,8 +3180,11 @@ dependencies = [
 name = "profnote"
 version = "0.3.2"
 dependencies = [
+ "block2",
  "cpal",
+ "dispatch2",
  "hound",
+ "objc2",
  "serde",
  "serde_json",
  "tauri",
