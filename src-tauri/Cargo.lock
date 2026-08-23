@@ -3185,6 +3185,7 @@ dependencies = [
  "dispatch2",
  "hound",
  "objc2",
+ "objc2-foundation",
  "serde",
  "serde_json",
  "tauri",

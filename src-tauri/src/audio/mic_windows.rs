@@ -22,13 +22,20 @@ pub fn ensure_access() -> Result<(), AppError> {
 
 fn ensure_access_inner() -> Result<(), AppError> {
     match current_status() {
-        Ok(DeviceAccessStatus::Allowed) => return Ok(()),
+        Ok(DeviceAccessStatus::Allowed) => Ok(()),
         Ok(DeviceAccessStatus::DeniedByUser | DeviceAccessStatus::DeniedBySystem) => {
-            return Err(AppError::AudioDevice(DENIED.into()));
+            Err(AppError::AudioDevice(DENIED.into()))
         }
-        _ => {}
+        _ => {
+            let _ = request_access();
+            match current_status() {
+                Ok(DeviceAccessStatus::DeniedByUser | DeviceAccessStatus::DeniedBySystem) => {
+                    Err(AppError::AudioDevice(DENIED.into()))
+                }
+                _ => Ok(()),
+            }
+        }
     }
-    request_access()
 }
 
 fn current_status() -> WinResult<DeviceAccessStatus> {
@@ -49,12 +56,7 @@ fn request_access() -> Result<(), AppError> {
         .map_err(|error| AppError::AudioDevice(error.to_string()))?;
     operation
         .get()
-        .map_err(|_| AppError::AudioDevice(DENIED.into()))?;
+        .map_err(|error| AppError::AudioDevice(error.to_string()))?;
     drop(capture);
-    match current_status() {
-        Ok(DeviceAccessStatus::DeniedByUser | DeviceAccessStatus::DeniedBySystem) => {
-            Err(AppError::AudioDevice(DENIED.into()))
-        }
-        _ => Ok(()),
-    }
+    Ok(())
 }

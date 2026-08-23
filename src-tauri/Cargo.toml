@@ -28,6 +28,7 @@ ureq = { version = "3.4.0", features = ["rustls", "json"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 whisper-rs = { version = "0.16.0", features = ["metal"] }
 objc2 = "0.6"
+objc2-foundation = "0.3"
 block2 = "0.6"
 dispatch2 = "0.3"
 

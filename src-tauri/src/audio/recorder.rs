@@ -16,14 +16,7 @@ const CALLBACK_CHUNK_SAMPLES: usize = 8192;
 const FLUSH_SAMPLE_COUNT: u64 = 480_000;
 
 fn no_input_device() -> AppError {
-    #[cfg(target_os = "windows")]
-    {
-        AppError::AudioDevice("microphone_denied_windows".into())
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        AppError::AudioDevice("no default input device found".into())
-    }
+    AppError::AudioDevice("no default input device found".into())
 }
 
 pub struct PcmDescriptor {
@@ -89,17 +82,7 @@ impl ActiveRecording {
                 "input device sample format not supported: {other:?}"
             ))),
         }?;
-        if let Err(error) = stream.play() {
-            #[cfg(target_os = "windows")]
-            {
-                let _ = error;
-                return Err(AppError::AudioDevice("microphone_denied_windows".into()));
-            }
-            #[cfg(not(target_os = "windows"))]
-            {
-                return Err(error.into());
-            }
-        }
+        stream.play()?;
 
         Ok(ActiveRecording {
             stream: Some(stream),
