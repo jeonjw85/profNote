@@ -1,4 +1,4 @@
-import { Channel, invoke } from "@tauri-apps/api/core";
+import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { z } from "zod";
 import {
   DiarizerPrepareEventSchema,
@@ -90,4 +90,8 @@ export async function writeMarkdown(filename: string, content: string): Promise<
 
 export async function deleteAudio(path: string): Promise<void> {
   await invoke("delete_audio", { path });
+}
+
+export function audioSrc(path: string): string {
+  return convertFileSrc(path);
 }

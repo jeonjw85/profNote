@@ -294,6 +294,14 @@ export default function App() {
                             void patchNote(selectedNote.id, patch)
                         }
                         onDelete={() => void removeNote(selectedNote.id)}
+                        onRegenerateSummary={() =>
+                            void pipeline.regenerateSummary(selectedNote)
+                        }
+                        regenerating={
+                            pipeline.pipeline?.stage === "summarizing" &&
+                            pipeline.pipeline.noteId === selectedNote.id
+                        }
+                        pipelineActive={pipeline.pipeline !== null}
                     />
                 ) : (
                     <div className={styles.empty}>
