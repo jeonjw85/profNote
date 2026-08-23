@@ -20,20 +20,28 @@ pub fn ensure_access() -> Result<(), AppError> {
     result
 }
 
+pub fn is_denied() -> bool {
+    matches!(
+        current_status(),
+        Ok(DeviceAccessStatus::DeniedByUser | DeviceAccessStatus::DeniedBySystem)
+    )
+}
+
+pub fn denied_or(fallback: AppError) -> AppError {
+    if is_denied() {
+        AppError::AudioDevice(DENIED.into())
+    } else {
+        fallback
+    }
+}
+
 fn ensure_access_inner() -> Result<(), AppError> {
     match current_status() {
         Ok(DeviceAccessStatus::Allowed) => Ok(()),
-        Ok(DeviceAccessStatus::DeniedByUser | DeviceAccessStatus::DeniedBySystem) => {
-            Err(AppError::AudioDevice(DENIED.into()))
-        }
+        Ok(DeviceAccessStatus::DeniedByUser | DeviceAccessStatus::DeniedBySystem) => Ok(()),
         _ => {
             let _ = request_access();
-            match current_status() {
-                Ok(DeviceAccessStatus::DeniedByUser | DeviceAccessStatus::DeniedBySystem) => {
-                    Err(AppError::AudioDevice(DENIED.into()))
-                }
-                _ => Ok(()),
-            }
+            Ok(())
         }
     }
 }

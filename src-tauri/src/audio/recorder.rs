@@ -19,6 +19,21 @@ fn no_input_device() -> AppError {
     AppError::AudioDevice("no default input device found".into())
 }
 
+fn mic_denied_or(fallback: AppError) -> AppError {
+    #[cfg(target_os = "macos")]
+    {
+        super::mic_macos::denied_or(fallback)
+    }
+    #[cfg(target_os = "windows")]
+    {
+        super::mic_windows::denied_or(fallback)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        fallback
+    }
+}
+
 pub struct PcmDescriptor {
     pub path: PathBuf,
     pub sample_rate: u32,
@@ -48,10 +63,12 @@ impl ActiveRecording {
         #[cfg(target_os = "windows")]
         super::mic_windows::ensure_access()?;
         let host = cpal::default_host();
-        let device = host
-            .default_input_device()
-            .ok_or_else(no_input_device)?;
-        let supported = device.default_input_config()?;
+        let device = host.default_input_device().ok_or_else(|| {
+            mic_denied_or(no_input_device())
+        })?;
+        let supported = device
+            .default_input_config()
+            .map_err(|error| mic_denied_or(error.into()))?;
         let sample_rate = supported.sample_rate();
         let channels = supported.channels();
         let started_at_ms = SystemTime::now()
@@ -82,7 +99,9 @@ impl ActiveRecording {
                 "input device sample format not supported: {other:?}"
             ))),
         }?;
-        stream.play()?;
+        stream
+            .play()
+            .map_err(|error| mic_denied_or(error.into()))?;
 
         Ok(ActiveRecording {
             stream: Some(stream),

@@ -19,21 +19,27 @@ fn authorization_status() -> isize {
     }
 }
 
-pub fn ensure_access() -> Result<(), AppError> {
-    match authorization_status() {
-        3 => Ok(()),
-        2 => Err(AppError::AudioDevice(MICROPHONE_DENIED.into())),
-        1 => Err(AppError::AudioDevice(MICROPHONE_DENIED.into())),
-        _ => match request_access() {
-            Ok(()) => Ok(()),
-            Err(error) if is_denied(&error) => Err(error),
-            Err(_) => Ok(()),
-        },
+pub fn is_denied() -> bool {
+    matches!(authorization_status(), 1 | 2)
+}
+
+pub fn denied_or(fallback: AppError) -> AppError {
+    if is_denied() {
+        AppError::AudioDevice(MICROPHONE_DENIED.into())
+    } else {
+        fallback
     }
 }
 
-fn is_denied(error: &AppError) -> bool {
-    error.to_string().contains(MICROPHONE_DENIED)
+pub fn ensure_access() -> Result<(), AppError> {
+    if authorization_status() != 0 {
+        return Ok(());
+    }
+    match request_access() {
+        Ok(()) => Ok(()),
+        Err(error) if error.to_string().contains(MICROPHONE_DENIED) => Err(error),
+        Err(_) => Ok(()),
+    }
 }
 
 fn request_access() -> Result<(), AppError> {
