@@ -36,30 +36,11 @@
 
 ## 시작하기
 
-터미널에서 아래 명령을 순서대로 실행하면 됩니다 (Apple Silicon 맥 기준).
+1. [Releases](https://github.com/jeonjw85/profNote/releases/latest)에서 최신 `.dmg`를 내려받아 응용 프로그램 폴더로 옮깁니다
+2. 터미널에서 FFmpeg를 설치합니다: `brew install ffmpeg`
+3. 앱을 열어 마이크 권한을 허용하고, 좌측 하단에서 Whisper 모델을 다운로드한 뒤 녹음을 시작합니다
 
-```bash
-# FFmpeg 설치 (녹음/가져오기 시 오디오 변환에 사용)
-brew install ffmpeg
-
-# 최신 릴리즈를 내려받아 응용 프로그램에 설치
-url=$(curl -s https://api.github.com/repos/jeonjw85/profNote/releases/latest \
-  | grep -o 'https://[^"]*_aarch64\.dmg' | head -1)
-curl -L -o profNote.dmg "$url"
-hdiutil attach profNote.dmg
-cp -R /Volumes/profNote*/profNote.app /Applications/
-hdiutil detach /Volumes/profNote*
-rm profNote.dmg
-
-# ad-hoc 서명 앱이므로 격리 속성 제거 (1회)
-xattr -cr /Applications/profNote.app
-
-open /Applications/profNote.app
-```
-
-처음 열면 마이크 권한을 허용하고, 좌측 하단에서 Whisper 모델을 다운로드한 뒤 녹음을 시작합니다.
-
-터미널 대신 GUI로 설치하려면 [Releases](https://github.com/jeonjw85/profNote/releases/latest)에서 최신 `.dmg`를 내려받아 응용 프로그램 폴더로 옮기면 됩니다. 이 경우 처음 열 때 `"확인되지 않은 개발자"` 안내가 뜨는데, 문서 하단의 **릴리즈 macOS에서 열기** 섹션을 참고하세요.
+> 처음 열 때 `"확인되지 않은 개발자"` 안내가 뜨면 아래 **릴리즈 macOS에서 열기** 섹션을 참고하세요
 
 ### 화자 분리 설정 (선택)
 

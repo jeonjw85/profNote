@@ -36,30 +36,11 @@ A desktop app that turns lecture recordings into Markdown lecture notes through 
 
 ## Getting Started
 
-Run the following commands in Terminal (Apple Silicon Macs).
+1. Download the latest `.dmg` from [Releases](https://github.com/jeonjw85/profNote/releases/latest) and move it to your Applications folder
+2. Install FFmpeg from Terminal: `brew install ffmpeg`
+3. Open the app, grant microphone permission, download a Whisper model from the bottom-left panel, then start recording
 
-```bash
-# Install FFmpeg (used for audio conversion when recording or importing)
-brew install ffmpeg
-
-# Download the latest release and install it to Applications
-url=$(curl -s https://api.github.com/repos/jeonjw85/profNote/releases/latest \
-  | grep -o 'https://[^"]*_aarch64\.dmg' | head -1)
-curl -L -o profNote.dmg "$url"
-hdiutil attach profNote.dmg
-cp -R /Volumes/profNote*/profNote.app /Applications/
-hdiutil detach /Volumes/profNote*
-rm profNote.dmg
-
-# The app is ad-hoc signed, so remove the quarantine attribute once
-xattr -cr /Applications/profNote.app
-
-open /Applications/profNote.app
-```
-
-On first launch, grant microphone permission, download a Whisper model from the bottom-left panel, then start recording.
-
-To install via GUI instead, download the latest `.dmg` from [Releases](https://github.com/jeonjw85/profNote/releases/latest) and move it to your Applications folder. In that case macOS shows an `"Unidentified Developer"` warning on first open - see the **Opening the Release on macOS** section at the bottom of this document.
+> If you see an `"Unidentified Developer"` warning on first open, see the **Opening the Release on macOS** section below.
 
 ### Diarization Setup (Optional)
 
