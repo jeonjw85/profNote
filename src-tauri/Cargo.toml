@@ -30,3 +30,11 @@ whisper-rs = { version = "0.16.0", features = ["metal"] }
 objc2 = "0.6"
 block2 = "0.6"
 dispatch2 = "0.3"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.61", features = [
+    "Foundation",
+    "Media_Capture",
+    "Devices_Enumeration",
+    "Win32_System_Com",
+] }

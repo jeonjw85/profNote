@@ -1,5 +1,7 @@
 #[cfg(target_os = "macos")]
 mod mic_macos;
+#[cfg(target_os = "windows")]
+mod mic_windows;
 mod recorder;
 
 pub use recorder::{ActiveRecording, PcmDescriptor};

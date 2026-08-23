@@ -358,6 +358,7 @@ function AppBody({
     const selectedNote = notes.find((note) => note.id === selectedId) ?? null;
     const stageText: Record<PipelineStage, string> = {
         diarizing: t("pipeline.diarizing"),
+        loading: t("pipeline.loadingModel"),
         transcribing: t("pipeline.transcribing"),
         summarizing: t("pipeline.summarizing"),
     };
@@ -390,11 +391,8 @@ function AppBody({
     } else if (pipeline.pipeline) {
         const { stage, percent, charsReceived } = pipeline.pipeline;
         let suffix = "";
-        if (stage === "transcribing") {
-            suffix =
-                percent === null || percent === 0
-                    ? t("pipeline.suffix.loadingModel")
-                    : ` ${percent}%`;
+        if (stage === "transcribing" && percent !== null && percent > 0) {
+            suffix = ` ${percent}%`;
         } else if (stage === "summarizing" && charsReceived !== null) {
             suffix = t("pipeline.suffix.chars", {
                 chars: charsReceived.toLocaleString(),

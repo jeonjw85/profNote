@@ -66,6 +66,7 @@ export const SpeakerDataSchema = z.object({
 export type SpeakerData = z.infer<typeof SpeakerDataSchema>;
 
 export const SttEventSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("loading") }),
   z.object({ type: z.literal("started") }),
   z.object({ type: z.literal("progress"), percent: z.number() }),
   z.object({ type: z.literal("finished") }),

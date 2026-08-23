@@ -52,6 +52,8 @@ impl ActiveRecording {
     pub fn start(recordings_dir: &Path) -> Result<ActiveRecording, AppError> {
         #[cfg(target_os = "macos")]
         super::mic_macos::ensure_access()?;
+        #[cfg(target_os = "windows")]
+        super::mic_windows::ensure_access()?;
         let host = cpal::default_host();
         let device = host
             .default_input_device()

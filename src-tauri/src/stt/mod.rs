@@ -40,6 +40,7 @@ pub enum DownloadEvent {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum SttEvent {
+    Loading,
     Started,
     Progress { percent: u32 },
     Finished,
@@ -262,6 +263,7 @@ pub fn transcribe(
     language: &str,
     on_event: &Channel<SttEvent>,
 ) -> Result<Transcript, AppError> {
+    let _ = on_event.send(SttEvent::Loading);
     let samples = read_wav_16k_mono(wav)?;
     load_context(state, model)?;
     let context = state

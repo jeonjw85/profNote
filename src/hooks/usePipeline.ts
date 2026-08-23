@@ -17,7 +17,7 @@ import {
 } from "../services/transcript";
 import type { Note, RecordingStopped, Settings, SpeakerSegment } from "../types";
 
-export type PipelineStage = "diarizing" | "transcribing" | "summarizing";
+export type PipelineStage = "diarizing" | "loading" | "transcribing" | "summarizing";
 
 export interface PipelineState {
   noteId: string;
@@ -93,8 +93,8 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
 
         setPipeline({
           noteId: id,
-          stage: "transcribing",
-          percent: 0,
+          stage: "loading",
+          percent: null,
           charsReceived: null,
         });
         const transcript = await transcribeAudio(
@@ -102,7 +102,14 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
           settings.whisperModel,
           settings.whisperLanguage,
           (event) => {
-            if (event.type === "progress") {
+            if (event.type === "loading" || event.type === "started") {
+              setPipeline({
+                noteId: id,
+                stage: "loading",
+                percent: null,
+                charsReceived: null,
+              });
+            } else if (event.type === "progress") {
               setPipeline({
                 noteId: id,
                 stage: "transcribing",

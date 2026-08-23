@@ -6,7 +6,7 @@ mod sidecar;
 mod stt;
 
 use std::path::PathBuf;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde::Serialize;
 use tauri::ipc::Channel;
@@ -16,7 +16,7 @@ use error::AppError;
 
 pub struct AppState {
     recording: Mutex<Option<audio::ActiveRecording>>,
-    stt: Mutex<stt::SttState>,
+    stt: Arc<Mutex<stt::SttState>>,
     data_dir: PathBuf,
 }
 
@@ -42,13 +42,6 @@ fn lock_recording<'a>(
         .recording
         .lock()
         .map_err(|_| AppError::Recording("recorder state lock poisoned".into()))
-}
-
-fn lock_stt<'a>(state: &'a State<'_, AppState>) -> Result<MutexGuard<'a, stt::SttState>, AppError> {
-    state
-        .stt
-        .lock()
-        .map_err(|_| AppError::Transcription("stt state lock poisoned".into()))
 }
 
 #[tauri::command]
@@ -130,7 +123,7 @@ async fn import_audio(
 }
 
 #[tauri::command]
-fn transcribe_audio(
+async fn transcribe_audio(
     state: State<'_, AppState>,
     wav_path: String,
     model: String,
@@ -149,8 +142,15 @@ fn transcribe_audio(
             "model '{model}' is not downloaded yet"
         )));
     }
-    let mut stt_state = lock_stt(&state)?;
-    stt::transcribe(&mut stt_state, &model_file, &wav, &language, &on_event)
+    let stt = Arc::clone(&state.stt);
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut stt_state = stt
+            .lock()
+            .map_err(|_| AppError::Transcription("stt state lock poisoned".into()))?;
+        stt::transcribe(&mut stt_state, &model_file, &wav, &language, &on_event)
+    })
+    .await
+    .map_err(|error| AppError::Transcription(error.to_string()))?
 }
 
 #[tauri::command]
@@ -210,7 +210,7 @@ fn prepare_diarizer(
 }
 
 #[tauri::command]
-fn run_diarization(
+async fn run_diarization(
     state: State<'_, AppState>,
     wav_path: String,
     hf_token: Option<String>,
@@ -221,7 +221,12 @@ fn run_diarization(
             "wav file not found: {wav_path}"
         )));
     }
-    sidecar::diarizer::run_diarization(&state.data_dir, &wav, hf_token.as_deref())
+    let data_dir = state.data_dir.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        sidecar::diarizer::run_diarization(&data_dir, &wav, hf_token.as_deref())
+    })
+    .await
+    .map_err(|error| AppError::Diarization(error.to_string()))?
 }
 
 #[tauri::command]
@@ -295,7 +300,7 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir)?;
             app.manage(AppState {
                 recording: Mutex::new(None),
-                stt: Mutex::new(stt::SttState::new()),
+                stt: Arc::new(Mutex::new(stt::SttState::new())),
                 data_dir,
             });
             Ok(())
