@@ -11,8 +11,11 @@ function recorderMessage(
   t: (key: string, vars?: Record<string, string | number>) => string,
 ): string {
   const raw = toMessage(error);
+  if (raw.includes("microphone_denied_windows")) {
+    return t("record.micDenied.win");
+  }
   if (raw.includes("microphone_denied")) {
-    return t("record.micDenied");
+    return t("record.micDenied.mac");
   }
   return raw;
 }

@@ -15,6 +15,17 @@ use crate::error::AppError;
 const CALLBACK_CHUNK_SAMPLES: usize = 8192;
 const FLUSH_SAMPLE_COUNT: u64 = 480_000;
 
+fn no_input_device() -> AppError {
+    #[cfg(target_os = "windows")]
+    {
+        AppError::AudioDevice("microphone_denied_windows".into())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        AppError::AudioDevice("no default input device found".into())
+    }
+}
+
 pub struct PcmDescriptor {
     pub path: PathBuf,
     pub sample_rate: u32,
@@ -44,7 +55,7 @@ impl ActiveRecording {
         let host = cpal::default_host();
         let device = host
             .default_input_device()
-            .ok_or_else(|| AppError::AudioDevice("no default input device found".into()))?;
+            .ok_or_else(no_input_device)?;
         let supported = device.default_input_config()?;
         let sample_rate = supported.sample_rate();
         let channels = supported.channels();
@@ -76,7 +87,17 @@ impl ActiveRecording {
                 "input device sample format not supported: {other:?}"
             ))),
         }?;
-        stream.play()?;
+        if let Err(error) = stream.play() {
+            #[cfg(target_os = "windows")]
+            {
+                let _ = error;
+                return Err(AppError::AudioDevice("microphone_denied_windows".into()));
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                return Err(error.into());
+            }
+        }
 
         Ok(ActiveRecording {
             stream: Some(stream),

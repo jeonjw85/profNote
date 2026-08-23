@@ -9,7 +9,7 @@ use objc2::{class, msg_send};
 
 use crate::error::AppError;
 
-pub const MICROPHONE_DENIED: &str = "microphone_denied";
+pub const MICROPHONE_DENIED: &str = "microphone_denied_macos";
 
 #[link(name = "AVFoundation", kind = "framework")]
 unsafe extern "C" {
