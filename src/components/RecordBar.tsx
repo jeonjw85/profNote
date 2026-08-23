@@ -124,7 +124,7 @@ export function RecordBar({
                     <span className={styles.dot} />
                 </button>
                 <div className={styles.label}>
-                    {recording && (
+                    {(recording || busy) && (
                         <span className={styles.timer}>
                             {formatTimestamp(elapsedMs)}
                         </span>

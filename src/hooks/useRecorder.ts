@@ -40,20 +40,22 @@ export function useRecorder(onCaptured: (capture: RecordingStopped) => void) {
     }
   }, []);
 
-  const stop = useCallback(async () => {
+    const stop = useCallback(async () => {
     if (status !== "recording") {
       return;
     }
     setStatus("stopping");
     try {
       const result = await stopRecording();
+      setStatus("idle");
+      startedAtRef.current = null;
+      setElapsedMs(0);
       onCapturedRef.current(result);
     } catch (caught) {
-      setError(toMessage(caught));
-    } finally {
       startedAtRef.current = null;
       setElapsedMs(0);
       setStatus("idle");
+      setError(toMessage(caught));
     }
   }, [status]);
 

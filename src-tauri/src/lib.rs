@@ -72,28 +72,33 @@ fn start_recording(state: State<'_, AppState>) -> Result<RecordingStarted, AppEr
 }
 
 #[tauri::command]
-fn stop_recording(state: State<'_, AppState>) -> Result<RecordingStopped, AppError> {
+async fn stop_recording(state: State<'_, AppState>) -> Result<RecordingStopped, AppError> {
     let active = lock_recording(&state)?
         .take()
         .ok_or_else(|| AppError::Recording("no active recording".into()))?;
-    let pcm = active.stop()?;
-    let wav_path = pcm.path.with_extension("wav");
-    if let Err(error) = sidecar::ffmpeg::pcm_to_wav16k_mono(&state.data_dir, &pcm, &wav_path) {
-        std::fs::remove_file(&wav_path).ok();
-        return Err(AppError::Recording(format!(
-            "{error}; raw audio kept at {} for recovery",
-            pcm.path.display()
-        )));
-    }
-    std::fs::remove_file(&pcm.path)?;
-    Ok(RecordingStopped {
-        wav_path: wav_path.to_string_lossy().into_owned(),
-        duration_ms: pcm.duration_ms,
+    let data_dir = state.data_dir.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let pcm = active.stop()?;
+        let wav_path = pcm.path.with_extension("wav");
+        if let Err(error) = sidecar::ffmpeg::pcm_to_wav16k_mono(&data_dir, &pcm, &wav_path) {
+            std::fs::remove_file(&wav_path).ok();
+            return Err(AppError::Recording(format!(
+                "{error}; raw audio kept at {} for recovery",
+                pcm.path.display()
+            )));
+        }
+        std::fs::remove_file(&pcm.path)?;
+        Ok(RecordingStopped {
+            wav_path: wav_path.to_string_lossy().into_owned(),
+            duration_ms: pcm.duration_ms,
+        })
     })
+    .await
+    .map_err(|error| AppError::Recording(error.to_string()))?
 }
 
 #[tauri::command]
-fn import_audio(
+async fn import_audio(
     state: State<'_, AppState>,
     source_path: String,
 ) -> Result<RecordingStopped, AppError> {
@@ -102,17 +107,20 @@ fn import_audio(
     let recordings_dir = state.data_dir.join("recordings");
     std::fs::create_dir_all(&recordings_dir)?;
     let wav_path = audio::next_recording_wav_path(&recordings_dir)?;
-    if let Err(error) =
-        sidecar::ffmpeg::file_to_wav16k_mono(&state.data_dir, &source, &wav_path)
-    {
-        std::fs::remove_file(&wav_path).ok();
-        return Err(error);
-    }
-    let duration_ms = audio::wav_duration_ms(&wav_path)?;
-    Ok(RecordingStopped {
-        wav_path: wav_path.to_string_lossy().into_owned(),
-        duration_ms,
+    let data_dir = state.data_dir.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Err(error) = sidecar::ffmpeg::file_to_wav16k_mono(&data_dir, &source, &wav_path) {
+            std::fs::remove_file(&wav_path).ok();
+            return Err(error);
+        }
+        let duration_ms = audio::wav_duration_ms(&wav_path)?;
+        Ok(RecordingStopped {
+            wav_path: wav_path.to_string_lossy().into_owned(),
+            duration_ms,
+        })
     })
+    .await
+    .map_err(|error| AppError::Recording(error.to_string()))?
 }
 
 #[tauri::command]
