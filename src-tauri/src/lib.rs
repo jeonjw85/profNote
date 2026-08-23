@@ -140,12 +140,17 @@ fn transcribe_audio(
 }
 
 #[tauri::command]
-fn download_model(
+async fn download_model(
     state: State<'_, AppState>,
     model: String,
     on_event: Channel<stt::DownloadEvent>,
 ) -> Result<(), AppError> {
-    stt::download_model(&state.data_dir.join("models"), &model, &on_event)?;
+    let models_dir = state.data_dir.join("models");
+    tauri::async_runtime::spawn_blocking(move || {
+        stt::download_model(&models_dir, &model, &on_event)
+    })
+    .await
+    .map_err(|error| AppError::Download(error.to_string()))??;
     Ok(())
 }
 
@@ -163,11 +168,16 @@ fn get_ffmpeg_status(state: State<'_, AppState>) -> sidecar::ffmpeg::FfmpegStatu
 }
 
 #[tauri::command]
-fn download_ffmpeg(
+async fn download_ffmpeg(
     state: State<'_, AppState>,
     on_event: Channel<sidecar::ffmpeg::FfmpegDownloadEvent>,
 ) -> Result<(), AppError> {
-    sidecar::ffmpeg_setup::download_ffmpeg(&state.data_dir, &on_event)?;
+    let data_dir = state.data_dir.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        sidecar::ffmpeg_setup::download_ffmpeg(&data_dir, &on_event)
+    })
+    .await
+    .map_err(|error| AppError::Download(error.to_string()))??;
     Ok(())
 }
 

@@ -25,16 +25,27 @@ function downloadLabel(
     kind: "ffmpeg" | "model",
     t: (key: string, vars?: Record<string, string | number>) => string,
 ): string {
-    const downloadedMb = (progress.downloadedBytes / (1024 * 1024)).toFixed(0);
+    const mb = progress.downloadedBytes / (1024 * 1024);
+    const mbLabel = mb < 10 ? mb.toFixed(1) : mb.toFixed(0);
     const prefix = kind === "ffmpeg" ? "record.ffmpeg" : "record.download";
-    if (progress.totalBytes === null) {
-        return t(`${prefix}.mb`, { mb: downloadedMb });
+    if (progress.totalBytes === null || progress.totalBytes === 0) {
+        return t(`${prefix}.mb`, { mb: mbLabel });
     }
     const percent = Math.min(
-        100,
+        99,
         Math.floor((progress.downloadedBytes / progress.totalBytes) * 100),
     );
-    return t(`${prefix}.percent`, { percent });
+    return t(`${prefix}.percent`, { percent, mb: mbLabel });
+}
+
+function downloadPercent(progress: DownloadProgress): number | null {
+    if (progress.totalBytes === null || progress.totalBytes === 0) {
+        return null;
+    }
+    return Math.min(
+        99,
+        Math.floor((progress.downloadedBytes / progress.totalBytes) * 100),
+    );
 }
 
 export function RecordBar({
@@ -68,9 +79,19 @@ export function RecordBar({
                 </button>
             )}
             {download && downloadKind ? (
-                <p className={styles.hint}>
-                    {downloadLabel(download, downloadKind, t)}
-                </p>
+                <div className={styles.progress}>
+                    <p className={styles.hint}>
+                        {downloadLabel(download, downloadKind, t)}
+                    </p>
+                    <div className={styles.progressTrack}>
+                        <div
+                            className={styles.progressFill}
+                            style={{
+                                width: `${downloadPercent(download) ?? 0}%`,
+                            }}
+                        />
+                    </div>
+                </div>
             ) : !ffmpegReady ? (
                 <button
                     type="button"
@@ -109,11 +130,13 @@ export function RecordBar({
                         </span>
                     )}
                     <span className={styles.statusText}>
-                        {busy
-                            ? t("record.saving")
-                            : recording
-                              ? t("record.recording")
-                              : t("record.idle")}
+                        {download
+                            ? t("record.downloading")
+                            : busy
+                              ? t("record.saving")
+                              : recording
+                                ? t("record.recording")
+                                : t("record.idle")}
                     </span>
                 </div>
             </div>

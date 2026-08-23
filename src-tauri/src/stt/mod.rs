@@ -14,7 +14,7 @@ const MODEL_BASE_URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/resol
 const KO_INITIAL_PROMPT: &str =
     "한국어 대학 강의 전사록입니다. 교수님이 전공 개념과 이론을 설명하고, 과제와 시험 일정을 안내합니다.";
 const DOWNLOAD_CHUNK_BYTES: usize = 256 * 1024;
-const PROGRESS_EVENT_BYTES: u64 = 8 * 1024 * 1024;
+const PROGRESS_EVENT_BYTES: u64 = 256 * 1024;
 const MAX_REDIRECTS: u32 = 5;
 
 #[derive(Debug, Clone, Serialize)]
@@ -111,7 +111,13 @@ pub fn download_model(
         .headers()
         .get("content-length")
         .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.parse::<u64>().ok());
+        .and_then(|value| value.parse::<u64>().ok())
+        .or_else(|| known_model_size(name));
+
+    let _ = on_event.send(DownloadEvent::Progress {
+        downloaded_bytes: 0,
+        total_bytes,
+    });
 
     let mut reader = response.into_body().into_reader();
     let mut file = std::fs::File::create(&partial)?;
@@ -156,6 +162,15 @@ pub fn download_model(
 fn model_url(name: &str) -> Result<String, AppError> {
     model_path(Path::new(""), name)?;
     Ok(format!("{MODEL_BASE_URL}/ggml-{name}.bin"))
+}
+
+fn known_model_size(name: &str) -> Option<u64> {
+    match name {
+        "medium" => Some(1_532_833_792),
+        "large-v3" => Some(2_955_219_968),
+        "large-v3-turbo" => Some(1_622_809_600),
+        _ => None,
+    }
 }
 
 fn fetch_following_redirects(url: &str) -> Result<ureq::http::Response<ureq::Body>, AppError> {

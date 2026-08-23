@@ -10,7 +10,7 @@ use crate::sidecar::ffmpeg::{
 };
 
 const DOWNLOAD_CHUNK_BYTES: usize = 256 * 1024;
-const PROGRESS_EVENT_BYTES: u64 = 1024 * 1024;
+const PROGRESS_EVENT_BYTES: u64 = 256 * 1024;
 const MAX_REDIRECTS: u32 = 5;
 
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
@@ -62,6 +62,10 @@ fn download_file(
         .get("content-length")
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.parse::<u64>().ok());
+    let _ = on_event.send(FfmpegDownloadEvent::Progress {
+        downloaded_bytes: 0,
+        total_bytes,
+    });
     let mut reader = response.into_body().into_reader();
     let mut file = std::fs::File::create(&partial)?;
     let mut downloaded: u64 = 0;
