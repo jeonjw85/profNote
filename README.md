@@ -5,7 +5,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/jeonjw85/profNote/ci.yml?label=CI)](https://github.com/jeonjw85/profNote/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/jeonjw85/profNote)](https://github.com/jeonjw85/profNote/releases/latest)
 
-<img src="src-tauri/icons/128x128@2x.png" width="96" alt="profNote">
+<img src="screenshots/app.png" width="720" alt="profNote">
 
 </div>
 
