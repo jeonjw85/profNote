@@ -52,6 +52,16 @@
   color: var(--color-text);
 }
 
+.actions button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.actions button:disabled:hover {
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
 .danger:hover {
   color: var(--color-accent);
 }
@@ -232,4 +242,69 @@
 
 .placeholder {
   color: var(--color-text-muted);
+}
+
+.timestamp {
+  display: inline;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  padding: 0 2px;
+  margin: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.timestamp:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.timestamp:disabled {
+  cursor: default;
+}
+
+.player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 32px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.player audio {
+  display: none;
+}
+
+.player button {
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.player button:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.playerSeek {
+  flex: 1;
+  min-width: 0;
+  height: 4px;
+  accent-color: var(--color-text-muted);
+}
+
+.playerTime {
+  font-size: 11.5px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }

@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type ChangeEvent,
+} from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import styles from "./Editor.module.css";
@@ -8,6 +15,7 @@ import {
     type NoteStatus,
     type SpeakerData,
 } from "../types";
+import { audioSrc } from "../services/audio";
 import type { NotePatch } from "../services/db";
 import {
     buildTranscriptText,
@@ -19,6 +27,40 @@ interface EditorProps {
     note: Note;
     onPatch: (patch: NotePatch) => void;
     onDelete: () => void;
+    onRegenerateSummary: () => void;
+    regenerating: boolean;
+    pipelineActive: boolean;
+}
+
+const TIMESTAMP_PREFIX = /^\[(\d{2,}:\d{2}:\d{2}|\d{2}:\d{2})\](?: |$)/;
+
+type TranscriptBlock =
+    | { kind: "timed"; stamp: string; seconds: number; text: string }
+    | { kind: "plain"; text: string };
+
+function timestampToSeconds(stamp: string): number {
+    const parts = stamp.split(":").map(Number);
+    if (parts.length === 3) {
+        const [hours, minutes, seconds] = parts;
+        return hours * 3600 + minutes * 60 + seconds;
+    }
+    const [minutes, seconds] = parts;
+    return minutes * 60 + seconds;
+}
+
+function parseTranscriptBlocks(transcript: string): TranscriptBlock[] {
+    return transcript.split("\n").map((line) => {
+        const match = TIMESTAMP_PREFIX.exec(line);
+        if (match === null || match[1] === undefined) {
+            return { kind: "plain", text: line };
+        }
+        return {
+            kind: "timed",
+            stamp: match[1],
+            seconds: timestampToSeconds(match[1]),
+            text: line.slice(match[0].length),
+        };
+    });
 }
 
 const EDIT_DEBOUNCE_MS = 400;
@@ -60,7 +102,14 @@ const STATUS_TEXT: Record<NoteStatus, string> = {
     error: "처리 실패",
 };
 
-export function Editor({ note, onPatch, onDelete }: EditorProps) {
+export function Editor({
+    note,
+    onPatch,
+    onDelete,
+    onRegenerateSummary,
+    regenerating,
+    pipelineActive,
+}: EditorProps) {
     const [title, setTitle] = useState(note.title);
     const [summary, setSummary] = useState(note.summary_md);
     const [transcript, setTranscript] = useState(note.transcript);
@@ -78,6 +127,11 @@ export function Editor({ note, onPatch, onDelete }: EditorProps) {
         transcript: note.transcript,
         professor: note.professor_speaker,
     });
+    const [playing, setPlaying] = useState(false);
+    const [currentTime, setCurrentTime] = useState(0);
+    const [duration, setDuration] = useState(0);
+    const [audioFailed, setAudioFailed] = useState(false);
+    const audioRef = useRef<HTMLAudioElement>(null);
 
     if (syncedId !== note.id) {
         setSyncedId(note.id);
@@ -95,6 +149,10 @@ export function Editor({ note, onPatch, onDelete }: EditorProps) {
         setConfirmingDelete(false);
         setTab(note.summary_md.length > 0 ? "summary" : "transcript");
         setPreview(true);
+        setPlaying(false);
+        setCurrentTime(0);
+        setDuration(0);
+        setAudioFailed(false);
     }
     if (syncedAt !== note.updated_at) {
         setSyncedAt(note.updated_at);
@@ -122,6 +180,12 @@ export function Editor({ note, onPatch, onDelete }: EditorProps) {
     const speakerOptions = speakerData
         ? summarizeSpeakers(speakerData.speakers)
         : [];
+    const transcriptBlocks = useMemo(
+        () => parseTranscriptBlocks(note.transcript),
+        [note.transcript],
+    );
+    const audioInteractive = note.audio_path !== null && !audioFailed;
+    const seekable = Number.isFinite(duration) && duration > 0;
 
     useEffect(() => {
         if (!confirmingDelete) {
@@ -162,6 +226,45 @@ export function Editor({ note, onPatch, onDelete }: EditorProps) {
         }
         setConfirmingDelete(true);
     };
+
+    const handleTogglePlay = useCallback(() => {
+        const element = audioRef.current;
+        if (element === null) {
+            return;
+        }
+        if (element.paused) {
+            void element.play().catch(() => {
+                setAudioFailed(true);
+            });
+        } else {
+            element.pause();
+        }
+    }, []);
+
+    const handleSeekBar = useCallback(
+        (event: ChangeEvent<HTMLInputElement>) => {
+            const element = audioRef.current;
+            const next = Number(event.target.value);
+            if (element === null || !Number.isFinite(next)) {
+                return;
+            }
+            element.currentTime = next;
+            setCurrentTime(next);
+        },
+        [],
+    );
+
+    const handleSeekTimestamp = useCallback((seconds: number) => {
+        const element = audioRef.current;
+        if (element === null) {
+            return;
+        }
+        element.currentTime = seconds;
+        setCurrentTime(seconds);
+        void element.play().catch(() => {
+            setAudioFailed(true);
+        });
+    }, []);
 
     const handleProfessorChange = (speaker: string) => {
         if (!speakerData || speaker === professor) {
@@ -222,6 +325,19 @@ export function Editor({ note, onPatch, onDelete }: EditorProps) {
                     >
                         {preview ? "편집" : "미리보기"}
                     </button>
+                    {note.transcript.length > 0 && (
+                        <button
+                            type="button"
+                            disabled={
+                                pipelineActive ||
+                                regenerating ||
+                                note.status === "transcribing"
+                            }
+                            onClick={onRegenerateSummary}
+                        >
+                            요약 재생성
+                        </button>
+                    )}
                     <button
                         type="button"
                         className={styles.danger}
@@ -265,9 +381,41 @@ export function Editor({ note, onPatch, onDelete }: EditorProps) {
                     ) : (
                         <div className={styles.preview}>
                             {note.transcript.length > 0 ? (
-                                <p className={styles.transcriptText}>
-                                    {note.transcript}
-                                </p>
+                                <div className={styles.transcriptText}>
+                                    {transcriptBlocks.map((block, index) => (
+                                        <span key={index}>
+                                            {block.kind === "timed" ? (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        className={
+                                                            styles.timestamp
+                                                        }
+                                                        disabled={
+                                                            !audioInteractive
+                                                        }
+                                                        onClick={() =>
+                                                            handleSeekTimestamp(
+                                                                block.seconds,
+                                                            )
+                                                        }
+                                                    >
+                                                        {block.stamp}
+                                                    </button>
+                                                    {block.text.length > 0
+                                                        ? ` ${block.text}`
+                                                        : ""}
+                                                </>
+                                            ) : (
+                                                block.text
+                                            )}
+                                            {index <
+                                            transcriptBlocks.length - 1
+                                                ? "\n"
+                                                : ""}
+                                        </span>
+                                    ))}
+                                </div>
                             ) : (
                                 <p className={styles.placeholder}>
                                     전사 내용이 아직 없습니다.
@@ -292,6 +440,56 @@ export function Editor({ note, onPatch, onDelete }: EditorProps) {
                     />
                 )}
             </div>
+            {note.audio_path !== null && !audioFailed && (
+                <div className={styles.player}>
+                    <audio
+                        key={note.id}
+                        ref={audioRef}
+                        src={audioSrc(note.audio_path)}
+                        preload="metadata"
+                        onPlay={() => setPlaying(true)}
+                        onPause={() => setPlaying(false)}
+                        onEnded={() => setPlaying(false)}
+                        onTimeUpdate={(event) =>
+                            setCurrentTime(event.currentTarget.currentTime)
+                        }
+                        onLoadedMetadata={(event) => {
+                            const next = event.currentTarget.duration;
+                            setDuration(Number.isFinite(next) ? next : 0);
+                        }}
+                        onError={() => setAudioFailed(true)}
+                    />
+                    <button
+                        type="button"
+                        onClick={handleTogglePlay}
+                        aria-label={playing ? "일시정지" : "재생"}
+                    >
+                        {playing ? "일시정지" : "재생"}
+                    </button>
+                    <input
+                        type="range"
+                        className={styles.playerSeek}
+                        min={0}
+                        max={seekable ? duration : 0}
+                        step={0.1}
+                        value={seekable ? currentTime : 0}
+                        disabled={!seekable}
+                        onChange={handleSeekBar}
+                        aria-label="재생 위치"
+                    />
+                    <span className={styles.playerTime}>
+                        {formatTimestamp(
+                            Number.isFinite(currentTime)
+                                ? currentTime * 1000
+                                : 0,
+                        )}{" "}
+                        /{" "}
+                        {formatTimestamp(
+                            Number.isFinite(duration) ? duration * 1000 : 0,
+                        )}
+                    </span>
+                </div>
+            )}
         </div>
     );
 }

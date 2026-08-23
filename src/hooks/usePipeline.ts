@@ -177,8 +177,83 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
     [settings, onNotesChanged, onNoteCreated]
   );
 
+  const regenerateSummary = useCallback(
+    async (note: Note) => {
+      if (pipeline !== null) {
+        return;
+      }
+      if (note.transcript.length === 0) {
+        setFailure(null);
+        setWarning("전사가 없어 요약을 재생성할 수 없습니다");
+        return;
+      }
+      if (
+        settings.openaiApiKey.trim().length === 0 &&
+        settings.llmBaseUrl.trim().length === 0
+      ) {
+        setFailure(null);
+        setWarning("LLM API 키 또는 Base URL을 설정하세요");
+        return;
+      }
+
+      setFailure(null);
+      setWarning(null);
+      setPipeline({
+        noteId: note.id,
+        stage: "summarizing",
+        percent: null,
+        charsReceived: 0,
+      });
+      try {
+        await updateNoteFields(note.id, { status: "summarizing" });
+        await onNotesChanged();
+        const summary = await summarizeTranscript(
+          settings.openaiApiKey.trim(),
+          { baseUrl: settings.llmBaseUrl, model: settings.llmModel },
+          note.transcript,
+          (receivedChars) =>
+            setPipeline({
+              noteId: note.id,
+              stage: "summarizing",
+              percent: null,
+              charsReceived: receivedChars,
+            })
+        );
+        await updateNoteFields(note.id, { summary_md: summary, status: "ready" });
+        await onNotesChanged();
+        try {
+          await writeMarkdown(
+            `note_${note.id.slice(0, 8)}`,
+            renderMarkdownDocument(note.title, summary)
+          );
+        } catch (caught) {
+          setWarning(`Markdown 파일 저장에 실패했습니다: ${toMessage(caught)}`);
+        }
+        setPipeline(null);
+      } catch (caught) {
+        setPipeline(null);
+        setFailure(toMessage(caught));
+        try {
+          await updateNoteFields(note.id, { status: "ready" });
+          await onNotesChanged();
+        } catch {
+          setFailure((current) => current ?? toMessage(caught));
+        }
+      }
+    },
+    [pipeline, settings, onNotesChanged]
+  );
+
   const clearFailure = useCallback(() => setFailure(null), []);
   const clearWarning = useCallback(() => setWarning(null), []);
 
-  return { pipeline, failure, clearFailure, warning, clearWarning, run };
+  return {
+    pipeline,
+    failure,
+    clearFailure,
+    warning,
+    clearWarning,
+    run,
+    regenerateSummary,
+  };
 }
