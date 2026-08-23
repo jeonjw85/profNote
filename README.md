@@ -12,7 +12,7 @@ A desktop app that turns lecture recordings into Markdown lecture notes through 
 ## Features
 
 - Microphone recording
-- Speaker diarization (pyannote) to transcribe only the professor's speech — automatic suggestion + manual correction
+- Speaker diarization (pyannote) to transcribe only the professor's speech - automatic suggestion + manual correction
 - Local transcription: whisper.cpp (`medium` / `large-v3` / `large-v3-turbo`, in-app model download, macOS Metal acceleration)
 - LLM summarization: OpenAI-compatible API (streaming, automatic retry) with Markdown output including tables
 - Click a transcript timestamp to play the recording from that point (built-in mini player)
@@ -96,7 +96,7 @@ Transcription runs entirely locally; only the transcript text is sent to the con
 ## Opening the Release on macOS (ad-hoc Signed App)
 
 This app is **ad-hoc signed**, not signed with an Apple Developer ID.  
-The first time you open an installer downloaded via browser, macOS reports an `"Unidentified Developer"` warning because of the missing Developer ID signature. This does not mean the app is damaged — open it using one of the methods below.
+The first time you open an installer downloaded via browser, macOS reports an `"Unidentified Developer"` warning because of the missing Developer ID signature. This does not mean the app is damaged - open it using one of the methods below.
 
 - **System Settings → Privacy & Security** → click **"Open Anyway"** at the bottom
 
