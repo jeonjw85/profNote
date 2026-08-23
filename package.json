@@ -1,6 +1,7 @@
 {
     "name": "profnote",
     "private": true,
+    "license": "MIT",
     "version": "0.3.6",
     "type": "module",
     "scripts": {

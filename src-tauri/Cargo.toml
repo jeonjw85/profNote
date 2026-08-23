@@ -3,6 +3,7 @@ name = "profnote"
 version = "0.3.6"
 description = "Lecture recorder and markdown note editor"
 authors = ["jjw"]
+license = "MIT"
 edition = "2024"
 
 [lib]

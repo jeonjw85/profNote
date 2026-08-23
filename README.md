@@ -68,3 +68,7 @@ npm run lint
 cargo test --manifest-path src-tauri/Cargo.toml
 cargo clippy --manifest-path src-tauri/Cargo.toml
 ```
+
+## License
+
+[MIT](LICENSE)
