@@ -38,7 +38,6 @@ A desktop app that turns lecture recordings into Markdown lecture notes through 
 
 ```bash
 brew install --cask jeonjw85/tap/profnote
-brew install ffmpeg
 ```
 
 Open the app, grant microphone permission, download a Whisper model from the bottom-left panel, then start recording.
@@ -91,8 +90,6 @@ Once confirmed in the dialog, the app opens normally afterwards.
 - macOS (microphone permission required)
 - [Rust](https://rustup.rs) stable toolchain + Xcode Command Line Tools
 - Node.js 20+
-- FFmpeg: `brew install ffmpeg`
-
 ### Run
 
 ```bash

@@ -38,7 +38,6 @@
 
 ```bash
 brew install --cask jeonjw85/tap/profnote
-brew install ffmpeg
 ```
 
 앱을 열어 마이크 권한을 허용하고, 좌측 하단에서 Whisper 모델을 다운로드한 뒤 녹음을 시작합니다.
@@ -91,8 +90,6 @@ brew install ffmpeg
 - macOS (마이크 권한 필요)
 - [Rust](https://rustup.rs) stable 툴체인 + Xcode Command Line Tools
 - Node.js 20+
-- FFmpeg: `brew install ffmpeg`
-
 ### 실행
 
 ```bash
