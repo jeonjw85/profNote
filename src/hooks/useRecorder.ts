@@ -1,11 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useI18n } from "../i18n/context";
 import { startRecording, stopRecording } from "../services/audio";
 import { toMessage } from "../services/errors";
 import type { RecordingStopped } from "../types";
 
 export type RecorderStatus = "idle" | "recording" | "stopping";
 
+function recorderMessage(
+  error: unknown,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): string {
+  const raw = toMessage(error);
+  if (raw.includes("microphone_denied")) {
+    return t("record.micDenied");
+  }
+  return raw;
+}
+
 export function useRecorder(onCaptured: (capture: RecordingStopped) => void) {
+  const { t } = useI18n();
   const [status, setStatus] = useState<RecorderStatus>("idle");
   const [elapsedMs, setElapsedMs] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -36,9 +49,9 @@ export function useRecorder(onCaptured: (capture: RecordingStopped) => void) {
       setElapsedMs(0);
       setStatus("recording");
     } catch (caught) {
-      setError(toMessage(caught));
+      setError(recorderMessage(caught, t));
     }
-  }, []);
+  }, [t]);
 
     const stop = useCallback(async () => {
     if (status !== "recording") {
@@ -55,9 +68,9 @@ export function useRecorder(onCaptured: (capture: RecordingStopped) => void) {
       startedAtRef.current = null;
       setElapsedMs(0);
       setStatus("idle");
-      setError(toMessage(caught));
+      setError(recorderMessage(caught, t));
     }
-  }, [status]);
+  }, [status, t]);
 
   const dismissError = useCallback(() => setError(null), []);
 

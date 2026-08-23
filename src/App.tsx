@@ -373,6 +373,12 @@ function AppBody({
             text: pipeline.failure,
             dismiss: pipeline.clearFailure,
         };
+    } else if (recorder.error) {
+        toast = {
+            tone: "error",
+            text: recorder.error,
+            dismiss: recorder.dismissError,
+        };
     } else if (loadError ?? appError) {
         toast = { tone: "error", text: loadError ?? appError ?? "" };
     } else if (pipeline.warning) {

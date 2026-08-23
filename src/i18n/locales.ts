@@ -67,6 +67,8 @@ export const ko: Record<string, string> = {
   "record.ffmpeg.needed": "FFmpeg 다운로드 필요!",
   "record.ffmpeg.percent": "FFmpeg 다운로드 중 {percent}% ({mb}MB)",
   "record.idle": "녹음 대기",
+  "record.micDenied":
+    "마이크 권한이 필요합니다. 시스템 설정 → 개인정보 보호 및 보안 → 마이크에서 profNote를 허용하세요.",
   "record.recording": "녹음 중",
   "record.saving": "오디오 변환 중",
   "record.start": "녹음 시작",
@@ -177,6 +179,8 @@ export const en: Record<string, string> = {
   "record.ffmpeg.needed": "FFmpeg download required!",
   "record.ffmpeg.percent": "Downloading FFmpeg {percent}% ({mb}MB)",
   "record.idle": "Ready to record",
+  "record.micDenied":
+    "Microphone access is required. Enable profNote in System Settings → Privacy & Security → Microphone.",
   "record.recording": "Recording",
   "record.saving": "Converting audio",
   "record.start": "Start recording",

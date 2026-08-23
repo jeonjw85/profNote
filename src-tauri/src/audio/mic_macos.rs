@@ -9,7 +9,7 @@ use objc2::{class, msg_send};
 
 use crate::error::AppError;
 
-const DENIED: &str = "Microphone access was denied. Enable profNote in System Settings > Privacy & Security > Microphone, then try again.";
+pub const MICROPHONE_DENIED: &str = "microphone_denied";
 
 #[link(name = "AVFoundation", kind = "framework")]
 unsafe extern "C" {
@@ -27,7 +27,7 @@ fn authorization_status() -> isize {
 pub fn ensure_access() -> Result<(), AppError> {
     match authorization_status() {
         3 => Ok(()),
-        1 | 2 => Err(AppError::AudioDevice(DENIED.into())),
+        1 | 2 => Err(AppError::AudioDevice(MICROPHONE_DENIED.into())),
         _ => request_access(),
     }
 }
@@ -50,9 +50,7 @@ fn request_access() -> Result<(), AppError> {
     });
     match rx.recv_timeout(Duration::from_secs(180)) {
         Ok(true) => Ok(()),
-        Ok(false) => Err(AppError::AudioDevice(DENIED.into())),
-        Err(_) => Err(AppError::AudioDevice(
-            "Microphone permission request timed out".into(),
-        )),
+        Ok(false) => Err(AppError::AudioDevice(MICROPHONE_DENIED.into())),
+        Err(_) => Err(AppError::AudioDevice(MICROPHONE_DENIED.into())),
     }
 }
