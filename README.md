@@ -36,9 +36,14 @@ A desktop app that turns lecture recordings into Markdown lecture notes through 
 
 ## Getting Started
 
-1. Download the latest `.dmg` from [Releases](https://github.com/jeonjw85/profNote/releases/latest) and move it to your Applications folder
-2. Install FFmpeg from Terminal: `brew install ffmpeg`
-3. Open the app, grant microphone permission, download a Whisper model from the bottom-left panel, then start recording
+Two lines in Terminal and you are done.
+
+```bash
+brew install --cask jeonjw85/tap/profnote
+brew install ffmpeg
+```
+
+Open the app, grant microphone permission, download a Whisper model from the bottom-left panel, then start recording.
 
 > If you see an `"Unidentified Developer"` warning on first open, see the **Opening the Release on macOS** section below.
 
