@@ -44,9 +44,7 @@ fn lock_recording<'a>(
         .map_err(|_| AppError::Recording("recorder state lock poisoned".into()))
 }
 
-fn lock_stt<'a>(
-    state: &'a State<'_, AppState>,
-) -> Result<MutexGuard<'a, stt::SttState>, AppError> {
+fn lock_stt<'a>(state: &'a State<'_, AppState>) -> Result<MutexGuard<'a, stt::SttState>, AppError> {
     state
         .stt
         .lock()
@@ -95,6 +93,27 @@ fn stop_recording(state: State<'_, AppState>) -> Result<RecordingStopped, AppErr
 }
 
 #[tauri::command]
+fn import_audio(
+    state: State<'_, AppState>,
+    source_path: String,
+) -> Result<RecordingStopped, AppError> {
+    let source = PathBuf::from(&source_path);
+    audio::validate_import_source(&source)?;
+    let recordings_dir = state.data_dir.join("recordings");
+    std::fs::create_dir_all(&recordings_dir)?;
+    let wav_path = audio::next_recording_wav_path(&recordings_dir)?;
+    if let Err(error) = sidecar::ffmpeg::file_to_wav16k_mono(&source, &wav_path) {
+        std::fs::remove_file(&wav_path).ok();
+        return Err(error);
+    }
+    let duration_ms = audio::wav_duration_ms(&wav_path)?;
+    Ok(RecordingStopped {
+        wav_path: wav_path.to_string_lossy().into_owned(),
+        duration_ms,
+    })
+}
+
+#[tauri::command]
 fn transcribe_audio(
     state: State<'_, AppState>,
     wav_path: String,
@@ -137,9 +156,7 @@ fn get_model_status(
 }
 
 #[tauri::command]
-fn get_diarizer_status(
-    state: State<'_, AppState>,
-) -> sidecar::diarizer::DiarizerStatus {
+fn get_diarizer_status(state: State<'_, AppState>) -> sidecar::diarizer::DiarizerStatus {
     sidecar::diarizer::status(&state.data_dir)
 }
 
@@ -246,6 +263,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             start_recording,
             stop_recording,
+            import_audio,
             transcribe_audio,
             download_model,
             get_model_status,
