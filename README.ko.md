@@ -9,15 +9,24 @@
 
 강의 녹음을 화자 분리, 로컬 STT, LLM 요약으로 Markdown 노트로 정리하는 데스크탑 앱
 
-## 시작하기
+## 설치
+
+[Releases](https://github.com/jeonjw85/profNote/releases/latest)에서 빌드를 받습니다.
+
+| macOS                    | Windows     |
+| ------------------------ | ----------- |
+| `.dmg` (Apple Silicon)   | NSIS `.exe` |
+
+macOS는 Homebrew로도 설치할 수 있습니다.
 
 ```bash
 brew install --cask jeonjw85/tap/profnote
 ```
 
-또는 [Releases](https://github.com/jeonjw85/profNote/releases/latest)에서 설치 파일을 받아 설치합니다.
+macOS 빌드는 ad-hoc 서명입니다. Gatekeeper는 그대로 막습니다: 시스템 설정 → 개인정보 보호 및 보안 → 그래도 열기  
+Windows는 미서명입니다. 처음 실행 시 SmartScreen이 경고할 수 있습니다.
 
-앱을 열고 마이크 권한을 허용한 뒤, 하단에서 FFmpeg와 Whisper 모델을 설치 시 진행할 수 있습니다.
+앱을 열고 마이크 권한을 허용한 뒤, 하단에서 FFmpeg와 Whisper 모델을 받으면 녹음을 시작할 수 있습니다.
 
 ## 기능
 
@@ -37,16 +46,6 @@ LLM은 OpenAI 호환 API를 씁니다.
 엔진이 없으면 전사는 그대로 진행합니다
 
 녹음, 모델, 노트는 `~/Library/Application Support/kr.jjw.profNote/`에 저장되고 전사는 로컬에서만 진행, 요약 시에만 전사 텍스트가 LLM API로 전송됩니다.
-
-## macOS에서 열기
-
-이 앱은 ad-hoc 서명입니다. 처음 열 때 `"확인되지 않은 개발자"`가 뜨면 **시스템 설정 → 개인정보 보호 및 보안**에서 **그래도 열기**를 누르면 됩니다.
-
-`"손상되었기 때문에 열 수 없습니다"`가 뜨면 한 번만 실행하세요 :
-
-```bash
-xattr -cr /Applications/profNote.app
-```
 
 ## 개발
 

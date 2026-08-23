@@ -9,17 +9,24 @@
 
 A desktop app that turns lecture recordings into Markdown notes with speaker diarization, local STT, and LLM summaries.
 
-## Getting Started
+## Install
+
+Download a build from [Releases](https://github.com/jeonjw85/profNote/releases/latest).
+
+| macOS                    | Windows     |
+| ------------------------ | ----------- |
+| `.dmg` (Apple Silicon)   | NSIS `.exe` |
+
+On macOS you can also install with Homebrew.
 
 ```bash
 brew install --cask jeonjw85/tap/profnote
 ```
 
-Or download an installer from [Releases](https://github.com/jeonjw85/profNote/releases/latest).
+macOS builds are ad-hoc signed. Gatekeeper still blocks first launch: System Settings → Privacy & Security → Open Anyway.  
+Windows builds are unsigned. SmartScreen may warn on first run.
 
 Open the app, grant microphone access, then download FFmpeg and a Whisper model from the bottom bar to start recording.
-
-> On macOS, if you see `"Unidentified Developer"`, see [Opening on macOS](#opening-on-macos).
 
 ## Features
 
@@ -36,16 +43,6 @@ Turn summary, transcription language, and diarization on or off in Settings. Sum
 Diarization is optional. Install the engine in Settings, accept the [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1) terms, and add a HuggingFace token. Without the engine, transcription still runs.
 
 Recordings, models, and notes live in `~/Library/Application Support/kr.jjw.profNote/`. Transcription stays local. Only the transcript text is sent to the LLM API when summarizing.
-
-## Opening on macOS
-
-This app is ad-hoc signed. If macOS shows `"Unidentified Developer"`, go to **System Settings → Privacy & Security** and click **Open Anyway**.
-
-If you see `"profNote.app is damaged and can't be opened"`, run this once:
-
-```bash
-xattr -cr /Applications/profNote.app
-```
 
 ## Development
 
