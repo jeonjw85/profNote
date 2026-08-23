@@ -9,27 +9,32 @@ interface RecordBarProps {
     elapsedMs: number;
     recorderError: string | null;
     modelReady: boolean;
+    ffmpegReady: boolean;
     modelName: string;
     download: DownloadProgress | null;
+    downloadKind: "ffmpeg" | "model" | null;
     onStart: () => void;
     onStop: () => void;
     onDownloadModel: () => void;
+    onDownloadFfmpeg: () => void;
     onDismissError: () => void;
 }
 
 function downloadLabel(
     progress: DownloadProgress,
+    kind: "ffmpeg" | "model",
     t: (key: string, vars?: Record<string, string | number>) => string,
 ): string {
     const downloadedMb = (progress.downloadedBytes / (1024 * 1024)).toFixed(0);
+    const prefix = kind === "ffmpeg" ? "record.ffmpeg" : "record.download";
     if (progress.totalBytes === null) {
-        return t("record.download.mb", { mb: downloadedMb });
+        return t(`${prefix}.mb`, { mb: downloadedMb });
     }
     const percent = Math.min(
         100,
         Math.floor((progress.downloadedBytes / progress.totalBytes) * 100),
     );
-    return t("record.download.percent", { percent });
+    return t(`${prefix}.percent`, { percent });
 }
 
 export function RecordBar({
@@ -37,16 +42,20 @@ export function RecordBar({
     elapsedMs,
     recorderError,
     modelReady,
+    ffmpegReady,
     modelName,
     download,
+    downloadKind,
     onStart,
     onStop,
     onDownloadModel,
+    onDownloadFfmpeg,
     onDismissError,
 }: RecordBarProps) {
     const { t } = useI18n();
     const recording = recorderStatus === "recording";
     const busy = recorderStatus === "stopping";
+    const setupBlocked = busy || Boolean(download) || !ffmpegReady || !modelReady;
     return (
         <div className={styles.bar}>
             {recorderError && (
@@ -58,8 +67,20 @@ export function RecordBar({
                     {recorderError}
                 </button>
             )}
-            {download ? (
-                <p className={styles.hint}>{downloadLabel(download, t)}</p>
+            {download && downloadKind ? (
+                <p className={styles.hint}>
+                    {downloadLabel(download, downloadKind, t)}
+                </p>
+            ) : !ffmpegReady ? (
+                <button
+                    type="button"
+                    className={styles.modelButton}
+                    onClick={onDownloadFfmpeg}
+                >
+                    {t("record.ffmpeg.needed")}
+                    <br />
+                    {t("record.ffmpeg.click")}
+                </button>
             ) : !modelReady ? (
                 <button
                     type="button"
@@ -67,7 +88,8 @@ export function RecordBar({
                     onClick={onDownloadModel}
                 >
                     {t("record.download.needed", { model: modelName })}
-                    <br />{t("record.download.click")}
+                    <br />
+                    {t("record.download.click")}
                 </button>
             ) : null}
             <div className={styles.controls}>
@@ -75,7 +97,7 @@ export function RecordBar({
                     type="button"
                     className={`${styles.button} ${recording ? styles.recording : ""}`}
                     onClick={recording ? onStop : onStart}
-                    disabled={busy || Boolean(download)}
+                    disabled={setupBlocked}
                     aria-label={recording ? t("record.stop") : t("record.start")}
                 >
                     <span className={styles.dot} />

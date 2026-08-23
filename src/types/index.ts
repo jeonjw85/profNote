@@ -89,6 +89,9 @@ export const ModelStatusSchema = z.object({
 });
 export type ModelStatus = z.infer<typeof ModelStatusSchema>;
 
+export const FfmpegStatusSchema = ModelStatusSchema;
+export type FfmpegStatus = ModelStatus;
+
 export const DiarizerStatusSchema = z.object({
   ready: z.boolean(),
   uvInstalled: z.boolean(),

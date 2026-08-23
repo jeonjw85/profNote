@@ -4,6 +4,7 @@ import {
   DiarizerPrepareEventSchema,
   DiarizerStatusSchema,
   DownloadEventSchema,
+  FfmpegStatusSchema,
   ModelStatusSchema,
   RecordingStartedSchema,
   RecordingStoppedSchema,
@@ -13,6 +14,7 @@ import {
   type DiarizerPrepareEvent,
   type DiarizerStatus,
   type DownloadEvent,
+  type FfmpegStatus,
   type ModelStatus,
   type RecordingStarted,
   type RecordingStopped,
@@ -126,6 +128,20 @@ export async function downloadModel(
     onEvent(DownloadEventSchema.parse(message));
   };
   await invoke("download_model", { model, onEvent: channel });
+}
+
+export async function getFfmpegStatus(): Promise<FfmpegStatus> {
+  return FfmpegStatusSchema.parse(await invoke("get_ffmpeg_status"));
+}
+
+export async function downloadFfmpeg(
+  onEvent: (event: DownloadEvent) => void
+): Promise<void> {
+  const channel = new Channel<unknown>();
+  channel.onmessage = (message) => {
+    onEvent(DownloadEventSchema.parse(message));
+  };
+  await invoke("download_ffmpeg", { onEvent: channel });
 }
 
 export async function writeMarkdown(filename: string, content: string): Promise<string> {

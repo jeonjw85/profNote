@@ -12,9 +12,11 @@ import { useRecorder } from "./hooks/useRecorder";
 import { I18nProvider } from "./i18n";
 import { useI18n } from "./i18n/context";
 import {
+    downloadFfmpeg,
     downloadModel,
     fileNameWithoutExtension,
     getDiarizerStatus,
+    getFfmpegStatus,
     getModelStatus,
     importAudio,
     isImportableAudioPath,
@@ -95,7 +97,13 @@ function AppBody({
     } = useNotes();
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [modelInstalled, setModelInstalled] = useState<boolean | null>(null);
+    const [ffmpegInstalled, setFfmpegInstalled] = useState<boolean | null>(
+        null,
+    );
     const [download, setDownload] = useState<DownloadProgress | null>(null);
+    const [downloadKind, setDownloadKind] = useState<
+        "ffmpeg" | "model" | null
+    >(null);
     const [diarizerReady, setDiarizerReady] = useState(false);
     const [diarizerInstalling, setDiarizerInstalling] = useState(false);
     const [diarizerProgress, setDiarizerProgress] = useState<string | null>(
@@ -115,6 +123,7 @@ function AppBody({
         recorderStatus: recorder.status,
         pipelineBusy: pipeline.pipeline !== null,
         modelInstalled,
+        ffmpegInstalled,
         run: pipeline.run,
     });
 
@@ -123,9 +132,16 @@ function AppBody({
             recorderStatus: recorder.status,
             pipelineBusy: pipeline.pipeline !== null,
             modelInstalled,
+            ffmpegInstalled,
             run: pipeline.run,
         };
-    }, [recorder.status, pipeline.pipeline, modelInstalled, pipeline.run]);
+    }, [
+        recorder.status,
+        pipeline.pipeline,
+        modelInstalled,
+        ffmpegInstalled,
+        pipeline.run,
+    ]);
 
     useEffect(() => {
         let cancelled = false;
@@ -147,7 +163,8 @@ function AppBody({
                         if (
                             guard.recorderStatus !== "idle" ||
                             guard.pipelineBusy ||
-                            guard.modelInstalled === false
+                            guard.modelInstalled === false ||
+                            guard.ffmpegInstalled === false
                         ) {
                             return;
                         }
@@ -211,6 +228,9 @@ function AppBody({
         getModelStatus(settings.whisperModel)
             .then((status) => setModelInstalled(status.installed))
             .catch((caught) => setAppError(toMessage(caught)));
+        getFfmpegStatus()
+            .then((status) => setFfmpegInstalled(status.installed))
+            .catch((caught) => setAppError(toMessage(caught)));
         getDiarizerStatus()
             .then((status) => setDiarizerReady(status.ready))
             .catch((caught) => setAppError(toMessage(caught)));
@@ -220,6 +240,7 @@ function AppBody({
         if (!settings || download) {
             return;
         }
+        setDownloadKind("model");
         setDownload({ downloadedBytes: 0, totalBytes: null });
         try {
             await downloadModel(settings.whisperModel, (event) => {
@@ -235,8 +256,33 @@ function AppBody({
             setAppError(toMessage(caught));
         } finally {
             setDownload(null);
+            setDownloadKind(null);
         }
     }, [settings, download]);
+
+    const handleDownloadFfmpeg = useCallback(async () => {
+        if (download) {
+            return;
+        }
+        setDownloadKind("ffmpeg");
+        setDownload({ downloadedBytes: 0, totalBytes: null });
+        try {
+            await downloadFfmpeg((event) => {
+                if (event.type === "progress") {
+                    setDownload({
+                        downloadedBytes: event.downloadedBytes,
+                        totalBytes: event.totalBytes,
+                    });
+                }
+            });
+            setFfmpegInstalled(true);
+        } catch (caught) {
+            setAppError(toMessage(caught));
+        } finally {
+            setDownload(null);
+            setDownloadKind(null);
+        }
+    }, [download]);
 
     const handleSaveSettings = useCallback(
         async (next: Settings) => {
@@ -389,11 +435,14 @@ function AppBody({
                     elapsedMs={recorder.elapsedMs}
                     recorderError={recorder.error}
                     modelReady={modelInstalled === true}
+                    ffmpegReady={ffmpegInstalled === true}
                     modelName={settings.whisperModel}
                     download={download}
+                    downloadKind={downloadKind}
                     onStart={() => void recorder.start()}
                     onStop={() => void recorder.stop()}
                     onDownloadModel={() => void handleDownloadModel()}
+                    onDownloadFfmpeg={() => void handleDownloadFfmpeg()}
                     onDismissError={recorder.dismissError}
                 />
             </aside>
