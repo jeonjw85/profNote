@@ -36,16 +36,11 @@
 
 ## 시작하기
 
-터미널에서 두 줄이면 설치가 끝납니다.
+1. [Releases](https://github.com/jeonjw85/profNote/releases/latest)에서 최신 설치 파일을 받아 설치합니다
+2. [FFmpeg](https://ffmpeg.org/download.html)를 설치합니다 (녹음, 가져오기 시 오디오 변환에 사용)
+3. 앱을 열어 마이크 권한을 허용하고, 좌측 하단에서 Whisper 모델을 다운로드한 뒤 녹음을 시작합니다
 
-```bash
-brew install --cask jeonjw85/tap/profnote
-brew install ffmpeg
-```
-
-앱을 열어 마이크 권한을 허용하고, 좌측 하단에서 Whisper 모델을 다운로드한 뒤 녹음을 시작합니다.
-
-> 처음 열 때 `"확인되지 않은 개발자"` 안내가 뜨면 아래 **릴리즈 macOS에서 열기** 섹션을 참고하세요
+> macOS에서 처음 열 때 `"확인되지 않은 개발자"` 안내가 뜨면 아래 **릴리즈 macOS에서 열기** 섹션을 참고하세요
 
 ### 화자 분리 설정 (선택)
 
