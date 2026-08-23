@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./App.module.css";
 import { Editor } from "./components/Editor";
 import { NoteList } from "./components/NoteList";
@@ -10,8 +11,11 @@ import { usePipeline, type PipelineStage } from "./hooks/usePipeline";
 import { useRecorder } from "./hooks/useRecorder";
 import {
     downloadModel,
+    fileNameWithoutExtension,
     getDiarizerStatus,
     getModelStatus,
+    importAudio,
+    isImportableAudioPath,
     prepareDiarizer,
 } from "./services/audio";
 import { fetchSettings, saveSettings } from "./services/db";
@@ -40,6 +44,10 @@ const STAGE_TEXT: Record<PipelineStage, string> = {
     transcribing: "로컬 전사 단계",
     summarizing: "요약 생성 단계",
 };
+
+function assertNever(value: never): never {
+    throw new Error(`unexpected value: ${JSON.stringify(value)}`);
+}
 
 function GearIcon() {
     return (
@@ -81,6 +89,7 @@ export default function App() {
     );
     const [appError, setAppError] = useState<string | null>(null);
     const [update, setUpdate] = useState<UpdateState>(null);
+    const [dropActive, setDropActive] = useState(false);
 
     const pipeline = usePipeline({
         settings: settings ?? DEFAULT_SETTINGS,
@@ -88,6 +97,82 @@ export default function App() {
         onNoteCreated: setSelectedId,
     });
     const recorder = useRecorder(pipeline.run);
+    const importGuardRef = useRef({
+        recorderStatus: recorder.status,
+        pipelineBusy: pipeline.pipeline !== null,
+        modelInstalled,
+        run: pipeline.run,
+    });
+
+    useEffect(() => {
+        importGuardRef.current = {
+            recorderStatus: recorder.status,
+            pipelineBusy: pipeline.pipeline !== null,
+            modelInstalled,
+            run: pipeline.run,
+        };
+    }, [recorder.status, pipeline.pipeline, modelInstalled, pipeline.run]);
+
+    useEffect(() => {
+        let cancelled = false;
+        let unlisten: (() => void) | undefined;
+        void getCurrentWebview()
+            .onDragDropEvent((event) => {
+                const payload = event.payload;
+                switch (payload.type) {
+                    case "enter":
+                    case "over":
+                        setDropActive(true);
+                        return;
+                    case "leave":
+                        setDropActive(false);
+                        return;
+                    case "drop": {
+                        setDropActive(false);
+                        const guard = importGuardRef.current;
+                        if (
+                            guard.recorderStatus !== "idle" ||
+                            guard.pipelineBusy ||
+                            guard.modelInstalled === false
+                        ) {
+                            return;
+                        }
+                        const path = payload.paths.find(isImportableAudioPath);
+                        if (path === undefined) {
+                            setAppError("지원하지 않는 오디오 형식입니다");
+                            return;
+                        }
+                        void (async () => {
+                            try {
+                                await guard.run(
+                                    await importAudio(path),
+                                    fileNameWithoutExtension(path),
+                                );
+                            } catch (caught) {
+                                setAppError(toMessage(caught));
+                            }
+                        })();
+                        return;
+                    }
+                    default:
+                        assertNever(payload);
+                }
+            })
+            .then((fn) => {
+                if (cancelled) {
+                    fn();
+                    return;
+                }
+                unlisten = fn;
+            })
+            .catch((caught) => {
+                setAppError(toMessage(caught));
+            });
+        return () => {
+            cancelled = true;
+            unlisten?.();
+        };
+    }, []);
 
     useEffect(() => {
         fetchSettings()
@@ -327,6 +412,13 @@ export default function App() {
                 <Toast tone={toast.tone} onDismiss={toast.dismiss}>
                     {toast.text}
                 </Toast>
+            )}
+            {dropActive && (
+                <div className={styles.dropOverlay} role="status">
+                    <div className={styles.dropOverlayFrame}>
+                        오디오 파일을 놓아서 가져오기
+                    </div>
+                </div>
             )}
         </div>
     );

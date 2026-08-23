@@ -29,6 +29,50 @@ export async function stopRecording(): Promise<RecordingStopped> {
   return RecordingStoppedSchema.parse(await invoke("stop_recording"));
 }
 
+export const IMPORT_AUDIO_EXTENSIONS = [
+  "mp3",
+  "m4a",
+  "aac",
+  "wav",
+  "flac",
+  "ogg",
+  "oga",
+  "opus",
+  "webm",
+  "wma",
+  "mp4",
+  "mov",
+] as const;
+
+export async function importAudio(sourcePath: string): Promise<RecordingStopped> {
+  return RecordingStoppedSchema.parse(await invoke("import_audio", { sourcePath }));
+}
+
+export function isImportableAudioPath(path: string): boolean {
+  const ext = fileExtension(path);
+  return ext !== undefined && IMPORT_AUDIO_EXTENSIONS.some((allowed) => allowed === ext);
+}
+
+export function fileNameWithoutExtension(path: string): string {
+  const name = pathBasename(path);
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(0, dot) : name;
+}
+
+function pathBasename(path: string): string {
+  const slash = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return slash >= 0 ? path.slice(slash + 1) : path;
+}
+
+function fileExtension(path: string): string | undefined {
+  const name = pathBasename(path);
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0) {
+    return undefined;
+  }
+  return name.slice(dot + 1).toLowerCase();
+}
+
 export async function transcribeAudio(
   wavPath: string,
   model: string,

@@ -75,3 +75,26 @@
     color: var(--color-text-muted);
     font-size: 13.5px;
 }
+
+.dropOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--color-surface) 86%, transparent);
+    color: var(--color-text-muted);
+    font-size: 14px;
+    pointer-events: none;
+}
+
+.dropOverlayFrame {
+    position: absolute;
+    inset: 18px;
+    border: 1px dashed var(--color-border);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
