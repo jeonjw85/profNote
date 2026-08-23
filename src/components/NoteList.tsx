@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import styles from "./NoteList.module.css";
 import type { Note, NoteStatus } from "../types";
 
@@ -25,27 +26,57 @@ function formatCreated(iso: string): string {
 }
 
 export function NoteList({ notes, selectedId, onSelect }: NoteListProps) {
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (needle === "") {
+      return notes;
+    }
+    return notes.filter(
+      (note) =>
+        note.title.toLowerCase().includes(needle) ||
+        note.transcript.toLowerCase().includes(needle) ||
+        note.summary_md.toLowerCase().includes(needle),
+    );
+  }, [notes, query]);
+
   if (notes.length === 0) {
     return <p className={styles.empty}>아직 노트가 없습니다. 아래 녹음 버튼으로 시작하세요.</p>;
   }
+
   return (
-    <nav className={styles.list}>
-      {notes.map((note) => (
-        <button
-          key={note.id}
-          type="button"
-          className={`${styles.item} ${note.id === selectedId ? styles.selected : ""}`}
-          onClick={() => onSelect(note.id)}
-        >
-          <span className={styles.title}>{note.title}</span>
-          <span className={styles.meta}>
-            <time>{formatCreated(note.created_at)}</time>
-            {STATUS_LABEL[note.status] && (
-              <em className={styles.status}>{STATUS_LABEL[note.status]}</em>
-            )}
-          </span>
-        </button>
-      ))}
-    </nav>
+    <>
+      <input
+        type="search"
+        className={styles.search}
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        aria-label="노트 검색"
+        placeholder="노트 검색"
+      />
+      {filtered.length === 0 ? (
+        <p className={styles.empty}>검색 결과가 없습니다</p>
+      ) : (
+        <nav className={styles.list}>
+          {filtered.map((note) => (
+            <button
+              key={note.id}
+              type="button"
+              className={`${styles.item} ${note.id === selectedId ? styles.selected : ""}`}
+              onClick={() => onSelect(note.id)}
+            >
+              <span className={styles.title}>{note.title}</span>
+              <span className={styles.meta}>
+                <time>{formatCreated(note.created_at)}</time>
+                {STATUS_LABEL[note.status] && (
+                  <em className={styles.status}>{STATUS_LABEL[note.status]}</em>
+                )}
+              </span>
+            </button>
+          ))}
+        </nav>
+      )}
+    </>
   );
 }
