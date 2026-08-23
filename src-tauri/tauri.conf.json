@@ -36,7 +36,7 @@
             "endpoints": [
                 "https://github.com/jeonjw85/profNote/releases/latest/download/latest.json"
             ],
-            "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhDN0Y5QUUyQkI0RkU0OQpSV1JKL3ZRcnJ2bkhDTE5FaEZwbytobzBINVc1OWd6b3VSWXVHMkFDSUVZMy9KT1ZzWURDUWw4dAo="
+            "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhDN0Y5QUUyQkI0RkU0OQpSV1JKL3JRcnJ2bkhDTE5FaEZwbytobzBINVc1OWd6b3VSWXVHMkFDSUVZMy9KT1ZzWURDUWw4dAo="
         }
     },
     "bundle": {
