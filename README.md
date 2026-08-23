@@ -15,6 +15,8 @@ A desktop app that turns lecture recordings into Markdown notes with speaker dia
 brew install --cask jeonjw85/tap/profnote
 ```
 
+Or download an installer from [Releases](https://github.com/jeonjw85/profNote/releases/latest).
+
 Open the app, grant microphone access, then download FFmpeg and a Whisper model from the bottom bar to start recording.
 
 > On macOS, if you see `"Unidentified Developer"`, see [Opening on macOS](#opening-on-macos).

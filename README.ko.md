@@ -7,7 +7,7 @@
 &nbsp;·&nbsp;
 <a href="README.ko.md">한국어</a>
 
-강의 녹음을 화자 분리, 로컬 STT, LLM 요약으로 Markdown 노트로 정리하는 데스크탑 앱입니다.
+강의 녹음을 화자 분리, 로컬 STT, LLM 요약으로 Markdown 노트로 정리하는 데스크탑 앱
 
 ## 시작하기
 
@@ -15,9 +15,9 @@
 brew install --cask jeonjw85/tap/profnote
 ```
 
-앱을 열고 마이크 권한을 허용한 뒤, 하단에서 FFmpeg와 Whisper 모델을 받으면 녹음을 시작할 수 있습니다.
+또는 [Releases](https://github.com/jeonjw85/profNote/releases/latest)에서 설치 파일을 받아 설치합니다.
 
-> macOS에서 `"확인되지 않은 개발자"` 안내가 뜨면 [아래 안내](#macos에서-열기)를 보세요.
+앱을 열고 마이크 권한을 허용한 뒤, 하단에서 FFmpeg와 Whisper 모델을 설치 시 진행할 수 있습니다.
 
 ## 기능
 
@@ -29,17 +29,20 @@ brew install --cask jeonjw85/tap/profnote
 
 ## 설정
 
-설정에서 요약, 전사 언어, 화자 분리를 켜고 끌 수 있습니다. LLM은 OpenAI 호환 API를 씁니다.
+설정에서 요약, 전사 언어, 화자 분리를 켜고 끌 수 있습니다.  
+LLM은 OpenAI 호환 API를 씁니다.
 
-화자 분리는 선택입니다. 설정에서 엔진을 설치하고 [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1) 사용 조건에 동의한 뒤 HuggingFace 토큰을 넣으면 됩니다. 엔진이 없으면 전사는 그대로 진행됩니다.
+화자 분리를 사용하고 싶을 시 :  
+설정에서 엔진을 설치하고 [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1) 사용 조건에 동의한 뒤 HuggingFace 토큰을 넣으면 됩니다.  
+엔진이 없으면 전사는 그대로 진행합니다
 
-녹음, 모델, 노트는 `~/Library/Application Support/kr.jjw.profNote/`에 저장됩니다. 전사는 로컬에서만 하고, 요약 시에만 전사 텍스트가 LLM API로 전송됩니다.
+녹음, 모델, 노트는 `~/Library/Application Support/kr.jjw.profNote/`에 저장되고 전사는 로컬에서만 진행, 요약 시에만 전사 텍스트가 LLM API로 전송됩니다.
 
 ## macOS에서 열기
 
 이 앱은 ad-hoc 서명입니다. 처음 열 때 `"확인되지 않은 개발자"`가 뜨면 **시스템 설정 → 개인정보 보호 및 보안**에서 **그래도 열기**를 누르면 됩니다.
 
-`"손상되었기 때문에 열 수 없습니다"`가 뜨면 한 번만 실행하세요:
+`"손상되었기 때문에 열 수 없습니다"`가 뜨면 한 번만 실행하세요 :
 
 ```bash
 xattr -cr /Applications/profNote.app
