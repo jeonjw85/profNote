@@ -26,21 +26,24 @@ fn resolve_ffmpeg() -> Result<PathBuf, AppError> {
     ))
 }
 
-pub fn pcm_to_wav16k_mono(pcm: &PcmDescriptor, output: &Path) -> Result<(), AppError> {
+fn convert_to_wav16k_mono(
+    extra_input_args: &[&str],
+    input: &Path,
+    output: &Path,
+) -> Result<(), AppError> {
     let ffmpeg = resolve_ffmpeg()?;
-    let output = Command::new(ffmpeg)
+    let mut command = Command::new(ffmpeg);
+    command
         .arg("-hide_banner")
         .arg("-loglevel")
         .arg("error")
-        .arg("-y")
-        .arg("-f")
-        .arg("s16le")
-        .arg("-ar")
-        .arg(pcm.sample_rate.to_string())
-        .arg("-ac")
-        .arg(pcm.channels.to_string())
+        .arg("-y");
+    for arg in extra_input_args {
+        command.arg(arg);
+    }
+    let completed = command
         .arg("-i")
-        .arg(&pcm.path)
+        .arg(input)
         .arg("-ar")
         .arg(TARGET_SAMPLE_RATE.to_string())
         .arg("-ac")
@@ -50,10 +53,31 @@ pub fn pcm_to_wav16k_mono(pcm: &PcmDescriptor, output: &Path) -> Result<(), AppE
         .arg(output)
         .output()
         .map_err(|error| AppError::Ffmpeg(error.to_string()))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
+    if !completed.status.success() {
+        let stderr = String::from_utf8_lossy(&completed.stderr);
         let detail = stderr.lines().next_back().unwrap_or("unknown ffmpeg error");
         return Err(AppError::Ffmpeg(detail.to_string()));
     }
     Ok(())
+}
+
+pub fn pcm_to_wav16k_mono(pcm: &PcmDescriptor, output: &Path) -> Result<(), AppError> {
+    let sample_rate = pcm.sample_rate.to_string();
+    let channels = pcm.channels.to_string();
+    convert_to_wav16k_mono(
+        &[
+            "-f",
+            "s16le",
+            "-ar",
+            sample_rate.as_str(),
+            "-ac",
+            channels.as_str(),
+        ],
+        &pcm.path,
+        output,
+    )
+}
+
+pub fn file_to_wav16k_mono(input: &Path, output: &Path) -> Result<(), AppError> {
+    convert_to_wav16k_mono(&[], input, output)
 }

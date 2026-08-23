@@ -37,14 +37,14 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
   const [warning, setWarning] = useState<string | null>(null);
 
   const run = useCallback(
-    async (capture: RecordingStopped) => {
+    async (capture: RecordingStopped, titleHint?: string) => {
       setFailure(null);
       setWarning(null);
       const id = crypto.randomUUID();
       const now = new Date().toISOString();
       const note: Note = {
         id,
-        title: defaultNoteTitle(new Date()),
+        title: titleHint?.trim() || defaultNoteTitle(new Date()),
         transcript: "",
         summary_md: "",
         audio_path: capture.wavPath,
