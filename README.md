@@ -1,11 +1,15 @@
+<div align="center">
+
 # profNote
 
-[![CI](https://github.com/jeonjw85/profNote/actions/workflows/ci.yml/badge.svg)](https://github.com/jeonjw85/profNote/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/jeonjw85/profNote/ci.yml?label=CI)](https://github.com/jeonjw85/profNote/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/jeonjw85/profNote)](https://github.com/jeonjw85/profNote/releases/latest)
 
-<a href="README.md"><strong>English</strong></a>
-&nbsp;·&nbsp;
-<a href="README.ko.md">한국어</a>
+<img src="src-tauri/icons/128x128@2x.png" width="96" alt="profNote">
+
+</div>
+
+[한국어](README.ko.md)
 
 A desktop app that turns lecture recordings into Markdown notes with speaker diarization, local STT, and LLM summaries.
 

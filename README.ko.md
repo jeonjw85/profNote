@@ -1,21 +1,25 @@
+<div align="center">
+
 # profNote
 
-[![CI](https://github.com/jeonjw85/profNote/actions/workflows/ci.yml/badge.svg)](https://github.com/jeonjw85/profNote/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/jeonjw85/profNote/ci.yml?label=CI)](https://github.com/jeonjw85/profNote/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/jeonjw85/profNote)](https://github.com/jeonjw85/profNote/releases/latest)
 
-<a href="README.md"><strong>English</strong></a>
-&nbsp;·&nbsp;
-<a href="README.ko.md">한국어</a>
+<img src="src-tauri/icons/128x128@2x.png" width="96" alt="profNote">
+
+</div>
+
+[English](README.md)
 
 강의 녹음을 화자 분리, 로컬 STT, LLM 요약으로 Markdown 노트로 정리하는 데스크탑 앱
 
 ## 설치
 
-[Releases](https://github.com/jeonjw85/profNote/releases/latest)에서 빌드를 받습니다.
+[Releases](https://github.com/jeonjw85/profNote/releases/latest)에서 빌드를 받습니다
 
-| macOS                    | Windows     |
-| ------------------------ | ----------- |
-| `.dmg` (Apple Silicon)   | NSIS `.exe` |
+| macOS                  | Windows     |
+| ---------------------- | ----------- |
+| `.dmg` (Apple Silicon) | NSIS `.exe` |
 
 macOS는 Homebrew로도 설치할 수 있습니다.
 
@@ -23,7 +27,8 @@ macOS는 Homebrew로도 설치할 수 있습니다.
 brew install --cask jeonjw85/tap/profnote
 ```
 
-macOS 빌드는 ad-hoc 서명입니다. Gatekeeper는 그대로 막습니다: 시스템 설정 → 개인정보 보호 및 보안 → 그래도 열기  
+macOS 빌드는 ad-hoc 서명입니다.  
+Gatekeeper는 그대로 막습니다 :: 시스템 설정 → 개인정보 보호 및 보안 → 그래도 열기  
 Windows는 미서명입니다. 처음 실행 시 SmartScreen이 경고할 수 있습니다.
 
 앱을 열고 마이크 권한을 허용한 뒤, 하단에서 FFmpeg와 Whisper 모델을 받으면 녹음을 시작할 수 있습니다.
