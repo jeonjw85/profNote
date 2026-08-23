@@ -34,23 +34,12 @@
 | 화자 분리    | pyannote.audio                        |
 | 데이터베이스 | SQLite (tauri-plugin-sql)             |
 
-## 요구 사항
-
-- macOS (마이크 권한 필요)
-- [Rust](https://rustup.rs) stable 툴체인 + Xcode Command Line Tools
-- Node.js 20+
-- FFmpeg: `brew install ffmpeg`
-- (선택) 화자 분리용 Python 3.10+ 가상환경
-- (선택) LLM API 키
-
 ## 시작하기
 
-```bash
-npm install
-npm run tauri dev
-```
-
-첫 실행 시 마이크 권한을 허용 후 좌측 하단에서 Whisper 모델을 다운로드한 뒤 녹음 시작
+1. [Releases](https://github.com/jeonjw85/profNote/releases/latest)에서 최신 설치 파일을 내려받아 응용 프로그램 폴더로 옮깁니다
+2. FFmpeg가 필요합니다. 터미널에서 `brew install ffmpeg`로 설치하세요 (녹음/가져오기 시 오디오 변환에 사용)
+3. 앱을 처음 열면 마이크 권한을 허용하고, 좌측 하단에서 Whisper 모델을 다운로드한 뒤 녹음을 시작합니다
+4. 처음 열 때 `"확인되지 않은 개발자"` 안내가 뜨면 문서 하단의 **릴리즈 macOS에서 열기** 섹션을 참고하세요
 
 ### 화자 분리 설정 (선택)
 
@@ -71,23 +60,6 @@ npm run tauri dev
 | 요약 언어                      | 요약 출력 언어 - 자동(전사 언어 따름) / 한국어 / English                                 |
 | UI 언어                        | 인터페이스 언어 - 한국어 / English                                                       |
 
-## 빌드
-
-```bash
-npm run tauri build
-```
-
-경로 : `src-tauri/target/release/bundle/`에 생성됩니다
-
-## 검증
-
-```bash
-npm run typecheck
-npm run lint
-cargo test --manifest-path src-tauri/Cargo.toml
-cargo clippy --manifest-path src-tauri/Cargo.toml
-```
-
 ## 데이터 저장 위치
 
 녹음, 모델, 노트, SQLite DB는 앱 데이터 디렉터리(`~/Library/Application Support/kr.jjw.profNote/`)에 저장됩니다.  
@@ -107,3 +79,36 @@ cargo clippy --manifest-path src-tauri/Cargo.toml
 > ```bash
 > xattr -cr /Applications/profNote.app
 > ```
+
+## 개발
+
+### 요구 사항
+
+- macOS (마이크 권한 필요)
+- [Rust](https://rustup.rs) stable 툴체인 + Xcode Command Line Tools
+- Node.js 20+
+- FFmpeg: `brew install ffmpeg`
+
+### 실행
+
+```bash
+npm install
+npm run tauri dev
+```
+
+### 빌드
+
+```bash
+npm run tauri build
+```
+
+경로 : `src-tauri/target/release/bundle/`에 생성됩니다
+
+### 검증
+
+```bash
+npm run typecheck
+npm run lint
+cargo test --manifest-path src-tauri/Cargo.toml
+cargo clippy --manifest-path src-tauri/Cargo.toml
+```

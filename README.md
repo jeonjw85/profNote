@@ -34,23 +34,12 @@ A desktop app that turns lecture recordings into Markdown lecture notes through 
 | Diarization   | pyannote.audio                        |
 | Database      | SQLite (tauri-plugin-sql)             |
 
-## Requirements
-
-- macOS (microphone permission required)
-- [Rust](https://rustup.rs) stable toolchain + Xcode Command Line Tools
-- Node.js 20+
-- FFmpeg: `brew install ffmpeg`
-- (Optional) Python 3.10+ virtualenv for diarization
-- (Optional) LLM API key
-
 ## Getting Started
 
-```bash
-npm install
-npm run tauri dev
-```
-
-On first launch, grant microphone permission, download a Whisper model from the bottom-left panel, then start recording.
+1. Download the latest installer from [Releases](https://github.com/jeonjw85/profNote/releases/latest) and move it to your Applications folder
+2. FFmpeg is required. Install it with `brew install ffmpeg` (used for audio conversion when recording or importing)
+3. On first launch, grant microphone permission, download a Whisper model from the bottom-left panel, then start recording
+4. If you see an `"Unidentified Developer"` warning on first open, see the **Opening the Release on macOS** section at the bottom of this document
 
 ### Diarization Setup (Optional)
 
@@ -71,23 +60,6 @@ When diarization is enabled and the engine and token are ready, the speaker who 
 | Summary language               | Output language of summaries: Auto (match transcript) / Korean / English                     |
 | UI language                    | Interface language: Korean / English                                                         |
 
-## Build
-
-```bash
-npm run tauri build
-```
-
-Output: `src-tauri/target/release/bundle/`
-
-## Verification
-
-```bash
-npm run typecheck
-npm run lint
-cargo test --manifest-path src-tauri/Cargo.toml
-cargo clippy --manifest-path src-tauri/Cargo.toml
-```
-
 ## Data Storage Location
 
 Recordings, models, notes, and the SQLite database are stored in the app data directory (`~/Library/Application Support/kr.jjw.profNote/`).  
@@ -107,3 +79,36 @@ Once confirmed in the dialog, the app opens normally afterwards.
 > ```bash
 > xattr -cr /Applications/profNote.app
 > ```
+
+## Development
+
+### Requirements
+
+- macOS (microphone permission required)
+- [Rust](https://rustup.rs) stable toolchain + Xcode Command Line Tools
+- Node.js 20+
+- FFmpeg: `brew install ffmpeg`
+
+### Run
+
+```bash
+npm install
+npm run tauri dev
+```
+
+### Build
+
+```bash
+npm run tauri build
+```
+
+Output: `src-tauri/target/release/bundle/`
+
+### Verification
+
+```bash
+npm run typecheck
+npm run lint
+cargo test --manifest-path src-tauri/Cargo.toml
+cargo clippy --manifest-path src-tauri/Cargo.toml
+```
