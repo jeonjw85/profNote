@@ -29,6 +29,12 @@
   letter-spacing: -0.01em;
 }
 
+.version {
+  margin: -8px 0 0;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
 .field {
   display: flex;
   flex-direction: column;

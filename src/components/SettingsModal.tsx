@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
+import { useEffect, useState } from "react";
 import styles from "./SettingsModal.module.css";
 import { useI18n } from "../i18n/context";
 import { toMessage } from "../services/errors";
@@ -38,6 +39,13 @@ export function SettingsModal({
     const [draft, setDraft] = useState<Settings>(settings);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [version, setVersion] = useState("");
+
+    useEffect(() => {
+        void getVersion()
+            .then(setVersion)
+            .catch(() => undefined);
+    }, []);
 
     const update = <K extends keyof Settings>(key: K, value: Settings[K]) => {
         setDraft((current) => ({ ...current, [key]: value }));
@@ -63,6 +71,9 @@ export function SettingsModal({
                 onClick={(event) => event.stopPropagation()}
             >
                 <h2 className={styles.title}>{t("settings.title")}</h2>
+                {version.length > 0 && (
+                    <p className={styles.version}>v{version}</p>
+                )}
                 <label className={styles.field}>
                     <span>{t("settings.uiLanguage")}</span>
                     <select
