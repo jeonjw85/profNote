@@ -3,7 +3,9 @@
 [![CI](https://github.com/jeonjw85/profNote/actions/workflows/ci.yml/badge.svg)](https://github.com/jeonjw85/profNote/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/jeonjw85/profNote)](https://github.com/jeonjw85/profNote/releases/latest)
 
-한국어 문서: [README.ko.md](README.ko.md)
+<a href="README.md"><strong>English</strong></a>
+&nbsp;·&nbsp;
+<a href="README.ko.md">한국어</a>
 
 A desktop app that turns lecture recordings into Markdown lecture notes through speaker diarization, local speech recognition (STT), and LLM summarization.
 
@@ -13,19 +15,24 @@ A desktop app that turns lecture recordings into Markdown lecture notes through 
 - Speaker diarization (pyannote) to transcribe only the professor's speech — automatic suggestion + manual correction
 - Local transcription: whisper.cpp (`medium` / `large-v3` / `large-v3-turbo`, in-app model download, macOS Metal acceleration)
 - LLM summarization: OpenAI-compatible API (streaming, automatic retry) with Markdown output including tables
+- Click a transcript timestamp to play the recording from that point (built-in mini player)
+- Note search across titles, transcripts, and summaries
+- Audio import: drag and drop existing lecture recordings (mp3, m4a, wav, ...) into the same pipeline
+- Summary regeneration for notes whose summary was cleared (e.g. after changing the professor speaker)
+- Korean/English UI with a summary language option (auto / Korean / English)
 - Transcript/summary tabs, Markdown preview, `.md` file export
 
 ## Tech Stack
 
-| Area         | Technology                            |
-| ------------ | ------------------------------------- |
-| Desktop      | Tauri v2 (Rust)                       |
-| Frontend     | React 19 + TypeScript, CSS Modules    |
-| Audio capture| cpal                                  |
-| Audio convert| FFmpeg                                |
-| Transcription| whisper-rs (whisper.cpp, macOS Metal) |
-| Diarization  | pyannote.audio                        |
-| Database     | SQLite (tauri-plugin-sql)             |
+| Area          | Technology                            |
+| ------------- | ------------------------------------- |
+| Desktop       | Tauri v2 (Rust)                       |
+| Frontend      | React 19 + TypeScript, CSS Modules    |
+| Audio capture | cpal                                  |
+| Audio convert | FFmpeg                                |
+| Transcription | whisper-rs (whisper.cpp, macOS Metal) |
+| Diarization   | pyannote.audio                        |
+| Database      | SQLite (tauri-plugin-sql)             |
 
 ## Requirements
 
@@ -55,12 +62,14 @@ When diarization is enabled and the engine and token are ready, the speaker who 
 
 ### Settings Overview
 
-| Setting                        | Description                                                                              |
-| ------------------------------ | ---------------------------------------------------------------------------------------- |
-| AI summary                     | Toggles the LLM summarization stage                                                      |
+| Setting                        | Description                                                                                  |
+| ------------------------------ | -------------------------------------------------------------------------------------------- |
+| AI summary                     | Toggles the LLM summarization stage                                                          |
 | LLM API key / Base URL / model | OpenAI-compatible API. Empty Base URL/model default to `https://api.openai.com/v1`, `gpt-4o` |
-| Whisper model / language       | `medium` / `large-v3` / `large-v3-turbo`, language `ko`/`en`/`auto`                      |
-| Speaker diarization            | Toggles the diarization stage                                                            |
+| Whisper model / language       | `medium` / `large-v3` / `large-v3-turbo`, language `ko`/`en`/`auto`                          |
+| Speaker diarization            | Toggles the diarization stage                                                                |
+| Summary language               | Output language of summaries: Auto (match transcript) / Korean / English                     |
+| UI language                    | Interface language: Korean / English                                                         |
 
 ## Build
 

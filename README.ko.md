@@ -3,6 +3,10 @@
 [![CI](https://github.com/jeonjw85/profNote/actions/workflows/ci.yml/badge.svg)](https://github.com/jeonjw85/profNote/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/jeonjw85/profNote)](https://github.com/jeonjw85/profNote/releases/latest)
 
+<a href="README.md"><strong>English</strong></a>
+&nbsp;·&nbsp;
+<a href="README.ko.md">한국어</a>
+
 강의 음성을 녹음하면 화자 분리, 로컬 음성 인식(STT), LLM 요약을 거쳐 MD 강의 노트로 정리해 주는 데스크탑 앱
 
 ## 기능
@@ -11,6 +15,11 @@
 - 화자 분리(pyannote) 후 교수님 발화만 선택해 전사 — 자동 추천 + 수동 정정
 - 로컬 전사: whisper.cpp (`medium` / `large-v3` / `large-v3-turbo`, 앱 내에서 모델 다운로드, macOS Metal 가속)
 - LLM 요약: OpenAI 호환 API(스트리밍, 자동 재시도), 표 포함 Markdown 출력
+- 원문 타임스탬프 클릭 시 해당 지점부터 오디오 재생 (미니 플레이어 내장)
+- 노트 검색: 제목·전문·요약 통합 검색
+- 오디오 파일 가져오기: 기존 강의 음성(mp3, m4a, wav 등)을 드래그앤드롭으로 같은 파이프라인 처리
+- 요약 재생성: 화자 변경 등으로 비워진 요약을 다시 생성
+- 한국어/영어 UI 전환, 요약 언어 선택(자동/한국어/English)
 - 원문/요약 탭 전환, Markdown 미리보기, `.md` 파일 저장
 
 ## 기술 스택
@@ -59,6 +68,8 @@ npm run tauri dev
 | LLM API 키 / Base URL / 모델명 | OpenAI 호환 API, Base URL과 모델명은 비워두면 각각 `https://api.openai.com/v1`, `gpt-4o` |
 | Whisper 모델 / 전사 언어       | `medium` / `large-v3` / `large-v3-turbo`, 언어는 `ko`/`en`/`auto`                        |
 | 화자 분리 사용                 | 화자 분리 단계 on/off                                                                    |
+| 요약 언어                      | 요약 출력 언어 - 자동(전사 언어 따름) / 한국어 / English                                 |
+| UI 언어                        | 인터페이스 언어 - 한국어 / English                                                       |
 
 ## 빌드
 
