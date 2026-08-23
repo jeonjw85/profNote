@@ -78,7 +78,7 @@ fn stop_recording(state: State<'_, AppState>) -> Result<RecordingStopped, AppErr
         .ok_or_else(|| AppError::Recording("no active recording".into()))?;
     let pcm = active.stop()?;
     let wav_path = pcm.path.with_extension("wav");
-    if let Err(error) = sidecar::ffmpeg::pcm_to_wav16k_mono(&pcm, &wav_path) {
+    if let Err(error) = sidecar::ffmpeg::pcm_to_wav16k_mono(&state.data_dir, &pcm, &wav_path) {
         std::fs::remove_file(&wav_path).ok();
         return Err(AppError::Recording(format!(
             "{error}; raw audio kept at {} for recovery",
@@ -102,7 +102,9 @@ fn import_audio(
     let recordings_dir = state.data_dir.join("recordings");
     std::fs::create_dir_all(&recordings_dir)?;
     let wav_path = audio::next_recording_wav_path(&recordings_dir)?;
-    if let Err(error) = sidecar::ffmpeg::file_to_wav16k_mono(&source, &wav_path) {
+    if let Err(error) =
+        sidecar::ffmpeg::file_to_wav16k_mono(&state.data_dir, &source, &wav_path)
+    {
         std::fs::remove_file(&wav_path).ok();
         return Err(error);
     }
@@ -153,6 +155,20 @@ fn get_model_status(
     model: String,
 ) -> Result<stt::ModelStatus, AppError> {
     stt::model_status(&state.data_dir.join("models"), &model)
+}
+
+#[tauri::command]
+fn get_ffmpeg_status(state: State<'_, AppState>) -> sidecar::ffmpeg::FfmpegStatus {
+    sidecar::ffmpeg::status(&state.data_dir)
+}
+
+#[tauri::command]
+fn download_ffmpeg(
+    state: State<'_, AppState>,
+    on_event: Channel<sidecar::ffmpeg::FfmpegDownloadEvent>,
+) -> Result<(), AppError> {
+    sidecar::ffmpeg_setup::download_ffmpeg(&state.data_dir, &on_event)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -267,6 +283,8 @@ pub fn run() {
             transcribe_audio,
             download_model,
             get_model_status,
+            get_ffmpeg_status,
+            download_ffmpeg,
             get_diarizer_status,
             prepare_diarizer,
             run_diarization,
