@@ -4,7 +4,7 @@ import { startRecording, stopRecording } from "../services/audio";
 import { toMessage } from "../services/errors";
 import type { RecordingStopped } from "../types";
 
-export type RecorderStatus = "idle" | "recording" | "stopping";
+export type RecorderStatus = "idle" | "requesting" | "recording" | "stopping";
 
 function recorderMessage(
   error: unknown,
@@ -46,12 +46,14 @@ export function useRecorder(onCaptured: (capture: RecordingStopped) => void) {
 
   const start = useCallback(async () => {
     setError(null);
+    setStatus("requesting");
     try {
       const info = await startRecording();
       startedAtRef.current = info.startedAtMs;
       setElapsedMs(0);
       setStatus("recording");
     } catch (caught) {
+      setStatus("idle");
       setError(recorderMessage(caught, t));
     }
   }, [t]);

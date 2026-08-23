@@ -65,8 +65,14 @@ export function RecordBar({
 }: RecordBarProps) {
     const { t } = useI18n();
     const recording = recorderStatus === "recording";
+    const requesting = recorderStatus === "requesting";
     const busy = recorderStatus === "stopping";
-    const setupBlocked = busy || Boolean(download) || !ffmpegReady || !modelReady;
+    const setupBlocked =
+        busy ||
+        requesting ||
+        Boolean(download) ||
+        !ffmpegReady ||
+        !modelReady;
     return (
         <div className={styles.bar}>
             {recorderError && (
@@ -132,11 +138,13 @@ export function RecordBar({
                     <span className={styles.statusText}>
                         {download
                             ? t("record.downloading")
-                            : busy
-                              ? t("record.saving")
-                              : recording
-                                ? t("record.recording")
-                                : t("record.idle")}
+                            : requesting
+                              ? t("record.micRequest")
+                              : busy
+                                ? t("record.saving")
+                                : recording
+                                  ? t("record.recording")
+                                  : t("record.idle")}
                     </span>
                 </div>
             </div>

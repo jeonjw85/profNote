@@ -52,22 +52,28 @@ fn lock_stt<'a>(state: &'a State<'_, AppState>) -> Result<MutexGuard<'a, stt::St
 }
 
 #[tauri::command]
-fn start_recording(state: State<'_, AppState>) -> Result<RecordingStarted, AppError> {
-    let mut recording = lock_recording(&state)?;
-    if recording.is_some() {
-        return Err(AppError::Recording(
-            "a recording is already in progress".into(),
-        ));
+async fn start_recording(state: State<'_, AppState>) -> Result<RecordingStarted, AppError> {
+    {
+        let recording = lock_recording(&state)?;
+        if recording.is_some() {
+            return Err(AppError::Recording(
+                "a recording is already in progress".into(),
+            ));
+        }
     }
     let recordings_dir = state.data_dir.join("recordings");
     std::fs::create_dir_all(&recordings_dir)?;
-    let active = audio::ActiveRecording::start(&recordings_dir)?;
+    let active = tauri::async_runtime::spawn_blocking(move || {
+        audio::ActiveRecording::start(&recordings_dir)
+    })
+    .await
+    .map_err(|error| AppError::Recording(error.to_string()))??;
     let started = RecordingStarted {
         started_at_ms: active.started_at_ms,
         sample_rate: active.sample_rate,
         channels: active.channels,
     };
-    *recording = Some(active);
+    *lock_recording(&state)? = Some(active);
     Ok(started)
 }
 
