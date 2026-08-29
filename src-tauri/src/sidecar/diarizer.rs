@@ -172,6 +172,7 @@ mod tests {
         assert!(super::DIARIZE_PY.contains("pyannote.audio"));
         assert!(super::DIARIZE_PY.contains("load_pcm16_wav"));
         assert!(super::DIARIZE_PY.contains("waveform"));
+        assert!(super::DIARIZE_PY.contains("speaker_diarization"));
     }
 
     #[test]

@@ -5,6 +5,14 @@ import sys
 import wave
 
 
+def speaker_segments(diarization):
+    annotation = getattr(diarization, "speaker_diarization", diarization)
+    return [
+        {"start": turn.start, "end": turn.end, "speaker": speaker}
+        for turn, _, speaker in annotation.itertracks(yield_label=True)
+    ]
+
+
 def load_pcm16_wav(path: str):
     import numpy as np
     import torch
@@ -51,12 +59,7 @@ def main() -> int:
         "pyannote/speaker-diarization-3.1", token=token
     )
     diarization = pipeline({"waveform": waveform, "sample_rate": sample_rate})
-
-    segments = [
-        {"start": turn.start, "end": turn.end, "speaker": speaker}
-        for turn, _, speaker in diarization.itertracks(yield_label=True)
-    ]
-    json.dump({"segments": segments}, sys.stdout)
+    json.dump({"segments": speaker_segments(diarization)}, sys.stdout)
     return 0
 
 
