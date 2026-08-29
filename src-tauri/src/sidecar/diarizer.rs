@@ -106,11 +106,7 @@ pub fn run_diarization(
         .map_err(|error| AppError::Diarization(error.to_string()))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        let detail = stderr
-            .lines()
-            .next_back()
-            .unwrap_or("unknown diarization error");
-        return Err(AppError::Diarization(detail.to_string()));
+        return Err(AppError::Diarization(error_detail(&stderr).into()));
     }
     let parsed: ScriptOutput = serde_json::from_slice(&output.stdout)
         .map_err(|e| AppError::Diarization(format!("invalid diarizer output: {e}")))?;
@@ -129,6 +125,15 @@ fn write_script(data_dir: &Path) -> Result<(), AppError> {
     std::fs::create_dir_all(diarize_dir(data_dir))?;
     std::fs::write(diarize_dir(data_dir).join("diarize.py"), DIARIZE_PY)?;
     Ok(())
+}
+
+fn error_detail(stderr: &str) -> &str {
+    stderr
+        .lines()
+        .rev()
+        .map(str::trim)
+        .find(|line| !line.is_empty() && !line.contains("libtorchcodec loading traceback"))
+        .unwrap_or("unknown diarization error")
 }
 
 #[cfg(test)]
@@ -165,5 +170,22 @@ mod tests {
     #[test]
     fn embedded_script_is_present() {
         assert!(super::DIARIZE_PY.contains("pyannote.audio"));
+        assert!(super::DIARIZE_PY.contains("load_pcm16_wav"));
+        assert!(super::DIARIZE_PY.contains("waveform"));
+    }
+
+    #[test]
+    fn error_detail_skips_torchcodec_footer() {
+        let stderr = "OSError: Could not load this library: libtorchcodec_core5.dylib\n[end of libtorchcodec loading traceback].\n";
+        assert_eq!(
+            super::error_detail(stderr),
+            "OSError: Could not load this library: libtorchcodec_core5.dylib"
+        );
+    }
+
+    #[test]
+    fn error_detail_uses_last_real_line() {
+        assert_eq!(super::error_detail("pyannote.audio is not installed\n"), "pyannote.audio is not installed");
+        assert_eq!(super::error_detail("   \n"), "unknown diarization error");
     }
 }
