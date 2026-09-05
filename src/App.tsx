@@ -7,8 +7,10 @@ import { RecordBar } from "./components/RecordBar";
 import { SettingsModal } from "./components/SettingsModal";
 import { Toast } from "./components/Toast";
 import { useNotes } from "./hooks/useNotes";
-import { usePipeline, type PipelineStage } from "./hooks/usePipeline";
+import { usePipeline } from "./hooks/usePipeline";
+import { useTickingNow } from "./hooks/useTickingNow";
 import { useRecorder } from "./hooks/useRecorder";
+import { buildProcessingView } from "./services/pipelineEta";
 import { I18nProvider } from "./i18n";
 import { useI18n } from "./i18n/context";
 import {
@@ -349,6 +351,8 @@ function AppBody({
         }
     }, []);
 
+    const now = useTickingNow(pipeline.pipeline !== null);
+
     if (!settings) {
         return (
             <div className={styles.loading}>{appError ?? t("app.loading")}</div>
@@ -356,12 +360,15 @@ function AppBody({
     }
 
     const selectedNote = notes.find((note) => note.id === selectedId) ?? null;
-    const stageText: Record<PipelineStage, string> = {
-        diarizing: t("pipeline.diarizing"),
-        loading: t("pipeline.loadingModel"),
-        transcribing: t("pipeline.transcribing"),
-        summarizing: t("pipeline.summarizing"),
-    };
+    const processing =
+        pipeline.pipeline === null
+            ? null
+            : buildProcessingView({
+                  state: pipeline.pipeline,
+                  nowMs: now,
+                  whisperModel: settings.whisperModel,
+                  t,
+              });
 
     let toast: {
         tone: "info" | "error";
@@ -388,17 +395,8 @@ function AppBody({
             text: pipeline.warning,
             dismiss: pipeline.clearWarning,
         };
-    } else if (pipeline.pipeline) {
-        const { stage, percent, charsReceived } = pipeline.pipeline;
-        let suffix = "";
-        if (stage === "transcribing" && percent !== null && percent > 0) {
-            suffix = ` ${percent}%`;
-        } else if (stage === "summarizing" && charsReceived !== null) {
-            suffix = t("pipeline.suffix.chars", {
-                chars: charsReceived.toLocaleString(),
-            });
-        }
-        toast = { tone: "info", text: `${stageText[stage]}${suffix}` };
+    } else if (processing) {
+        toast = { tone: "info", text: processing.statusText };
     } else if (update?.status === "available") {
         toast = {
             tone: "info",
@@ -443,6 +441,7 @@ function AppBody({
                     modelName={settings.whisperModel}
                     download={download}
                     downloadKind={downloadKind}
+                    processing={processing}
                     onStart={() => void recorder.start()}
                     onStop={() => void recorder.stop()}
                     onDownloadModel={() => void handleDownloadModel()}
@@ -466,6 +465,11 @@ function AppBody({
                             pipeline.pipeline.noteId === selectedNote.id
                         }
                         pipelineActive={pipeline.pipeline !== null}
+                        processingHint={
+                            pipeline.pipeline?.noteId === selectedNote.id
+                                ? processing?.statusText ?? null
+                                : null
+                        }
                     />
                 ) : (
                     <div className={styles.empty}>

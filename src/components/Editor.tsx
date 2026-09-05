@@ -31,6 +31,7 @@ interface EditorProps {
     onRegenerateSummary: () => void;
     regenerating: boolean;
     pipelineActive: boolean;
+    processingHint: string | null;
 }
 
 const TIMESTAMP_PREFIX = /^\[(\d{2,}:\d{2}:\d{2}|\d{2}:\d{2})\](?: |$)/;
@@ -106,6 +107,7 @@ export function Editor({
     onRegenerateSummary,
     regenerating,
     pipelineActive,
+    processingHint,
 }: EditorProps) {
     const { t } = useI18n();
     const statusText: Record<NoteStatus, string> = {
@@ -381,7 +383,8 @@ export function Editor({
                                 </ReactMarkdown>
                             ) : (
                                 <p className={styles.placeholder}>
-                                    {t("editor.empty.summary")}
+                                    {processingHint ??
+                                        t("editor.empty.summary")}
                                 </p>
                             )}
                         </div>
@@ -425,7 +428,8 @@ export function Editor({
                                 </div>
                             ) : (
                                 <p className={styles.placeholder}>
-                                    {t("editor.empty.transcript")}
+                                    {processingHint ??
+                                        t("editor.empty.transcript")}
                                 </p>
                             )}
                         </div>
@@ -439,11 +443,14 @@ export function Editor({
                                 ? setSummary(event.target.value)
                                 : setTranscript(event.target.value)
                         }
-                        placeholder={bodyPlaceholder(
-                            note.status,
-                            tab === "summary",
-                            t,
-                        )}
+                        placeholder={
+                            processingHint ??
+                            bodyPlaceholder(
+                                note.status,
+                                tab === "summary",
+                                t,
+                            )
+                        }
                         aria-label={t("editor.aria.body")}
                     />
                 )}
