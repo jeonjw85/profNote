@@ -1,5 +1,6 @@
 import styles from "./RecordBar.module.css";
 import { useI18n } from "../i18n/context";
+import type { ProcessingView } from "../services/pipelineEta";
 import { formatTimestamp } from "../services/transcript";
 import type { RecorderStatus } from "../hooks/useRecorder";
 import type { DownloadProgress } from "../types";
@@ -13,6 +14,7 @@ interface RecordBarProps {
     modelName: string;
     download: DownloadProgress | null;
     downloadKind: "ffmpeg" | "model" | null;
+    processing: ProcessingView | null;
     onStart: () => void;
     onStop: () => void;
     onDownloadModel: () => void;
@@ -57,6 +59,7 @@ export function RecordBar({
     modelName,
     download,
     downloadKind,
+    processing,
     onStart,
     onStop,
     onDownloadModel,
@@ -67,9 +70,11 @@ export function RecordBar({
     const recording = recorderStatus === "recording";
     const requesting = recorderStatus === "requesting";
     const busy = recorderStatus === "stopping";
+    const processingActive = processing !== null;
     const setupBlocked =
         busy ||
         requesting ||
+        processingActive ||
         Boolean(download) ||
         !ffmpegReady ||
         !modelReady;
@@ -94,6 +99,18 @@ export function RecordBar({
                             className={styles.progressFill}
                             style={{
                                 width: `${downloadPercent(download) ?? 0}%`,
+                            }}
+                        />
+                    </div>
+                </div>
+            ) : processing ? (
+                <div className={styles.progress}>
+                    <p className={styles.hint}>{processing.statusText}</p>
+                    <div className={styles.progressTrack}>
+                        <div
+                            className={styles.progressFill}
+                            style={{
+                                width: `${processing.percent ?? 0}%`,
                             }}
                         />
                     </div>
@@ -130,9 +147,13 @@ export function RecordBar({
                     <span className={styles.dot} />
                 </button>
                 <div className={styles.label}>
-                    {(recording || busy) && (
+                    {(recording || busy || processing !== null) && (
                         <span className={styles.timer}>
-                            {formatTimestamp(elapsedMs)}
+                            {formatTimestamp(
+                                processing === null
+                                    ? elapsedMs
+                                    : processing.elapsedMs,
+                            )}
                         </span>
                     )}
                     <span className={styles.statusText}>
@@ -142,9 +163,11 @@ export function RecordBar({
                               ? t("record.micRequest")
                               : busy
                                 ? t("record.saving")
-                                : recording
-                                  ? t("record.recording")
-                                  : t("record.idle")}
+                                : processing !== null
+                                  ? t("record.processing")
+                                  : recording
+                                    ? t("record.recording")
+                                    : t("record.idle")}
                     </span>
                 </div>
             </div>
