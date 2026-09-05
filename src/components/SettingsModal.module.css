@@ -168,6 +168,72 @@
   line-height: 1.45;
 }
 
+.modelField {
+  margin: 0;
+  padding: 0;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.modelField legend {
+  padding: 0;
+  margin-bottom: 2px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.modelList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.modelOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.modelOption:hover {
+  background: var(--color-surface-hover);
+}
+
+.modelOption[data-selected="true"] {
+  border-color: var(--color-text-muted);
+}
+
+.modelOption input {
+  margin: 3px 0 0;
+  accent-color: var(--color-text);
+}
+
+.modelCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.modelName {
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.modelMeta {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
 .secondary {
   align-self: flex-start;
   border: 1px solid var(--color-border);

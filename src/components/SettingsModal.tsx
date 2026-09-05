@@ -3,12 +3,32 @@ import { useEffect, useState } from "react";
 import styles from "./SettingsModal.module.css";
 import { useI18n } from "../i18n/context";
 import { toMessage } from "../services/errors";
+import { sttMinutesPerAudioHour } from "../services/pipelineEta";
 import {
     SUMMARY_LANGUAGES,
     WHISPER_MODELS,
+    isWhisperModel,
     type Settings,
     type SummaryLanguage,
+    type WhisperModel,
 } from "../types";
+
+function assertNever(value: never): never {
+    throw new Error(`unexpected value: ${JSON.stringify(value)}`);
+}
+
+function whisperMetaKey(model: WhisperModel): string {
+    switch (model) {
+        case "medium":
+            return "settings.whisper.meta.medium";
+        case "large-v3":
+            return "settings.whisper.meta.large-v3";
+        case "large-v3-turbo":
+            return "settings.whisper.meta.large-v3-turbo";
+        default:
+            return assertNever(model);
+    }
+}
 
 const SUMMARY_LANGUAGE_LABEL: Record<SummaryLanguage, string> = {
     auto: "settings.summaryAuto",
@@ -168,39 +188,58 @@ export function SettingsModal({
                         </div>
                     </div>
                 </div>
-                <div className={styles.row}>
-                    <label className={styles.field}>
-                        <span>{t("settings.whisperModel")}</span>
-                        <select
-                            value={draft.whisperModel}
-                            onChange={(event) =>
-                                update(
-                                    "whisperModel",
-                                    event.target
-                                        .value as Settings["whisperModel"],
-                                )
-                            }
-                        >
-                            {WHISPER_MODELS.map((model) => (
-                                <option key={model} value={model}>
-                                    {model}
-                                </option>
-                            ))}
-                        </select>
-                    </label>
-                    <label className={styles.field}>
-                        <span>{t("settings.whisperLanguage")}</span>
-                        <input
-                            value={draft.whisperLanguage}
-                            onChange={(event) =>
-                                update("whisperLanguage", event.target.value)
-                            }
-                            placeholder={t(
-                                "settings.whisperLanguage.placeholder",
-                            )}
-                        />
-                    </label>
-                </div>
+                <fieldset className={styles.modelField}>
+                    <legend>{t("settings.whisperModel")}</legend>
+                    <div className={styles.modelList}>
+                        {WHISPER_MODELS.map((model) => (
+                            <label
+                                key={model}
+                                className={styles.modelOption}
+                                data-selected={
+                                    draft.whisperModel === model || undefined
+                                }
+                            >
+                                <input
+                                    type="radio"
+                                    name="whisperModel"
+                                    value={model}
+                                    checked={draft.whisperModel === model}
+                                    onChange={(event) => {
+                                        const value = event.target.value;
+                                        if (isWhisperModel(value)) {
+                                            update("whisperModel", value);
+                                        }
+                                    }}
+                                />
+                                <span className={styles.modelCopy}>
+                                    <span className={styles.modelName}>
+                                        {model}
+                                    </span>
+                                    <span className={styles.modelMeta}>
+                                        {t(whisperMetaKey(model))}
+                                        <br />
+                                        {t("settings.whisper.perHour", {
+                                            minutes: sttMinutesPerAudioHour(
+                                                model,
+                                            ),
+                                        })}
+                                    </span>
+                                </span>
+                            </label>
+                        ))}
+                    </div>
+                    <p className={styles.hint}>{t("settings.whisper.hint")}</p>
+                </fieldset>
+                <label className={styles.field}>
+                    <span>{t("settings.whisperLanguage")}</span>
+                    <input
+                        value={draft.whisperLanguage}
+                        onChange={(event) =>
+                            update("whisperLanguage", event.target.value)
+                        }
+                        placeholder={t("settings.whisperLanguage.placeholder")}
+                    />
+                </label>
                 <div className={styles.group}>
                     <label className={styles.toggle}>
                         <input
