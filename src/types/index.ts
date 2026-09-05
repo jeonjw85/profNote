@@ -111,7 +111,38 @@ export const DiarizerPrepareEventSchema = z.discriminatedUnion("type", [
 ]);
 export type DiarizerPrepareEvent = z.infer<typeof DiarizerPrepareEventSchema>;
 
+export const PIPELINE_STAGES = [
+  "diarizing",
+  "loading",
+  "transcribing",
+  "summarizing",
+] as const;
+export type PipelineStage = (typeof PIPELINE_STAGES)[number];
+
 export const WHISPER_MODELS = ["medium", "large-v3", "large-v3-turbo"] as const;
+export type WhisperModel = (typeof WHISPER_MODELS)[number];
+
+export const WHISPER_MODEL_META = {
+  medium: {
+    sizeBytes: 1_532_833_792,
+    sttRealtimeFactor: 0.58,
+  },
+  "large-v3-turbo": {
+    sizeBytes: 1_622_809_600,
+    sttRealtimeFactor: 0.33,
+  },
+  "large-v3": {
+    sizeBytes: 2_955_219_968,
+    sttRealtimeFactor: 1.5,
+  },
+} as const satisfies Record<
+  WhisperModel,
+  { readonly sizeBytes: number; readonly sttRealtimeFactor: number }
+>;
+
+export function isWhisperModel(value: string): value is WhisperModel {
+  return WHISPER_MODELS.some((model) => model === value);
+}
 
 export const SUMMARY_LANGUAGES = ["auto", "ko", "en"] as const;
 export type SummaryLanguage = (typeof SUMMARY_LANGUAGES)[number];
