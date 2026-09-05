@@ -15,15 +15,24 @@ import {
   pickProfessorSpeaker,
   renderMarkdownDocument,
 } from "../services/transcript";
-import type { Note, RecordingStopped, Settings, SpeakerSegment } from "../types";
+import type {
+  Note,
+  PipelineStage,
+  RecordingStopped,
+  Settings,
+  SpeakerSegment,
+} from "../types";
 
-export type PipelineStage = "diarizing" | "loading" | "transcribing" | "summarizing";
+export type { PipelineStage };
 
 export interface PipelineState {
   noteId: string;
   stage: PipelineStage;
   percent: number | null;
   charsReceived: number | null;
+  audioDurationMs: number;
+  pipelineStartedAtMs: number;
+  stageStartedAtMs: number;
 }
 
 interface PipelineOptions {
@@ -56,6 +65,20 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
         segments_json: "",
         professor_speaker: null,
       };
+      const pipelineStartedAtMs = Date.now();
+      const audioDurationMs = capture.durationMs;
+      const enterStage = (
+        stage: PipelineStage,
+        extra: Partial<Pick<PipelineState, "percent" | "charsReceived">> = {},
+      ): PipelineState => ({
+        noteId: id,
+        stage,
+        percent: extra.percent ?? null,
+        charsReceived: extra.charsReceived ?? null,
+        audioDurationMs,
+        pipelineStartedAtMs,
+        stageStartedAtMs: Date.now(),
+      });
       try {
         await insertNote(note);
         await onNotesChanged();
@@ -70,12 +93,7 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
             if (!engine.ready) {
               setWarning(t("pipeline.skip.engine"));
             } else {
-              setPipeline({
-                noteId: id,
-                stage: "diarizing",
-                percent: null,
-                charsReceived: null,
-              });
+              setPipeline(enterStage("diarizing"));
               try {
                 speakers = await runDiarization(
                   capture.wavPath,
@@ -91,31 +109,28 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
           }
         }
 
-        setPipeline({
-          noteId: id,
-          stage: "loading",
-          percent: null,
-          charsReceived: null,
-        });
+        setPipeline(enterStage("loading"));
         const transcript = await transcribeAudio(
           capture.wavPath,
           settings.whisperModel,
           settings.whisperLanguage,
           (event) => {
             if (event.type === "loading" || event.type === "started") {
-              setPipeline({
-                noteId: id,
-                stage: "loading",
-                percent: null,
-                charsReceived: null,
-              });
+              setPipeline((current) => ({
+                ...enterStage("loading"),
+                stageStartedAtMs:
+                  current?.stage === "loading"
+                    ? current.stageStartedAtMs
+                    : Date.now(),
+              }));
             } else if (event.type === "progress") {
-              setPipeline({
-                noteId: id,
-                stage: "transcribing",
-                percent: event.percent,
-                charsReceived: null,
-              });
+              setPipeline((current) => ({
+                ...enterStage("transcribing", { percent: event.percent }),
+                stageStartedAtMs:
+                  current?.stage === "transcribing"
+                    ? current.stageStartedAtMs
+                    : Date.now(),
+              }));
             }
           }
         );
@@ -143,24 +158,20 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
         await onNotesChanged();
 
         if (summaryEnabled) {
-          setPipeline({
-            noteId: id,
-            stage: "summarizing",
-            percent: null,
-            charsReceived: 0,
-          });
+          setPipeline(enterStage("summarizing", { charsReceived: 0 }));
           const summary = await summarizeTranscript(
             settings.openaiApiKey.trim(),
             { baseUrl: settings.llmBaseUrl, model: settings.llmModel },
             transcriptText,
             settings.summaryLanguage,
             (receivedChars) =>
-              setPipeline({
-                noteId: id,
-                stage: "summarizing",
-                percent: null,
-                charsReceived: receivedChars,
-              })
+              setPipeline((current) => ({
+                ...enterStage("summarizing", { charsReceived: receivedChars }),
+                stageStartedAtMs:
+                  current?.stage === "summarizing"
+                    ? current.stageStartedAtMs
+                    : Date.now(),
+              }))
           );
           await updateNoteFields(id, { summary_md: summary, status: "ready" });
           await onNotesChanged();
@@ -208,12 +219,19 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
 
       setFailure(null);
       setWarning(null);
-      setPipeline({
+      const pipelineStartedAtMs = Date.now();
+      const enterStage = (
+        extra: Partial<Pick<PipelineState, "percent" | "charsReceived">> = {},
+      ): PipelineState => ({
         noteId: note.id,
         stage: "summarizing",
-        percent: null,
-        charsReceived: 0,
+        percent: extra.percent ?? null,
+        charsReceived: extra.charsReceived ?? null,
+        audioDurationMs: 0,
+        pipelineStartedAtMs,
+        stageStartedAtMs: Date.now(),
       });
+      setPipeline(enterStage({ charsReceived: 0 }));
       try {
         await updateNoteFields(note.id, { status: "summarizing" });
         await onNotesChanged();
@@ -223,12 +241,13 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
           note.transcript,
           settings.summaryLanguage,
           (receivedChars) =>
-            setPipeline({
-              noteId: note.id,
-              stage: "summarizing",
-              percent: null,
-              charsReceived: receivedChars,
-            })
+            setPipeline((current) => ({
+              ...enterStage({ charsReceived: receivedChars }),
+              stageStartedAtMs:
+                current?.stage === "summarizing"
+                  ? current.stageStartedAtMs
+                  : Date.now(),
+            }))
         );
         await updateNoteFields(note.id, { summary_md: summary, status: "ready" });
         await onNotesChanged();
