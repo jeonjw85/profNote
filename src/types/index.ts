@@ -77,13 +77,17 @@ export const SttEventSchema = z.discriminatedUnion("type", [
 ]);
 export type SttEvent = z.infer<typeof SttEventSchema>;
 
+const DownloadProgressEventSchema = z.object({
+  type: z.literal("progress"),
+  downloadedBytes: z.number().int().nonnegative(),
+  totalBytes: z.number().int().nonnegative().nullable(),
+}).strict().refine(
+  (event) => event.totalBytes === null || event.downloadedBytes <= event.totalBytes,
+);
+
 export const DownloadEventSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("progress"),
-    downloadedBytes: z.number(),
-    totalBytes: z.number().nullable(),
-  }),
-  z.object({ type: z.literal("done"), path: z.string() }),
+  DownloadProgressEventSchema,
+  z.object({ type: z.literal("done"), path: z.string().min(1) }).strict(),
 ]);
 export type DownloadEvent = z.infer<typeof DownloadEventSchema>;
 
@@ -105,13 +109,12 @@ export const DiarizerStatusSchema = z.object({
 export type DiarizerStatus = z.infer<typeof DiarizerStatusSchema>;
 
 export const DiarizerPrepareEventSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("stage"), name: z.string() }),
   z.object({
-    type: z.literal("progress"),
-    downloadedBytes: z.number(),
-    totalBytes: z.number().nullable(),
-  }),
-  z.object({ type: z.literal("done") }),
+    type: z.literal("stage"),
+    name: z.enum(["uv", "python", "packages", "engine"]),
+  }).strict(),
+  DownloadProgressEventSchema,
+  z.object({ type: z.literal("done") }).strict(),
 ]);
 export type DiarizerPrepareEvent = z.infer<typeof DiarizerPrepareEventSchema>;
 

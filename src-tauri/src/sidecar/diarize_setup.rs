@@ -83,11 +83,8 @@ pub fn ensure_engine(
         });
         install_uv(data_dir, on_event)?;
     }
-    if !engine_marker(data_dir).is_file() {
-        let _ = on_event.send(DiarizerPrepareEvent::Stage {
-            name: "engine".into(),
-        });
-        install_engine(data_dir)?;
+    if !engine_marker(data_dir).is_file() || !venv_python(data_dir).is_file() {
+        install_engine(data_dir, on_event)?;
         std::fs::write(engine_marker(data_dir), UV_VERSION)?;
     }
     let _ = on_event.send(DiarizerPrepareEvent::Done);
@@ -129,20 +126,32 @@ fn install_uv(data_dir: &Path, on_event: &Channel<DiarizerPrepareEvent>) -> Resu
     Ok(())
 }
 
-fn install_engine(data_dir: &Path) -> Result<(), AppError> {
+fn install_engine(data_dir: &Path, on_event: &Channel<DiarizerPrepareEvent>) -> Result<(), AppError> {
     let uv = uv_binary(data_dir);
     let venv = diarize_dir(data_dir).join("venv");
     let python_dir = diarize_dir(data_dir).join("python");
     let cache_dir = diarize_dir(data_dir).join("cache");
     std::fs::create_dir_all(&python_dir)?;
     std::fs::create_dir_all(&cache_dir)?;
+    let _ = on_event.send(DiarizerPrepareEvent::Stage {
+        name: "python".into(),
+    });
     run_uv(
         &uv,
-        &["venv", &venv.to_string_lossy(), "--python", "3.11"],
+        &[
+            "venv",
+            &venv.to_string_lossy(),
+            "--python",
+            "3.11",
+            "--allow-existing",
+        ],
         &python_dir,
         &cache_dir,
     )?;
     let python = venv_python(data_dir);
+    let _ = on_event.send(DiarizerPrepareEvent::Stage {
+        name: "packages".into(),
+    });
     run_uv(
         &uv,
         &[
@@ -302,6 +311,39 @@ fn fetch_following_redirects(url: &str) -> Result<ureq::http::Response<ureq::Bod
 mod tests {
     use super::uv_artifact;
 
+    #[cfg(unix)]
+    struct TestDirectory(std::path::PathBuf);
+
+    #[cfg(unix)]
+    impl TestDirectory {
+        fn new() -> Result<Self, Box<dyn std::error::Error>> {
+            let suffix = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!(
+                "profnote-engine-test-{}-{suffix}",
+                std::process::id()
+            ));
+            std::fs::create_dir(&path)?;
+            std::fs::create_dir(super::diarize_dir(&path))?;
+            Ok(Self(path))
+        }
+
+        fn write_uv(&self, script: &str) -> Result<(), std::io::Error> {
+            use std::os::unix::fs::PermissionsExt;
+            let path = super::uv_binary(&self.0);
+            std::fs::write(&path, script)?;
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+        }
+    }
+
+    #[cfg(unix)]
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
     #[test]
     fn macos_arm_uses_darwin_tarball() {
         let (triple, ext) = uv_artifact("macos", "aarch64").expect("macos arm");
@@ -319,5 +361,86 @@ mod tests {
     #[test]
     fn unsupported_platform_is_rejected() {
         assert!(uv_artifact("linux", "x86_64").is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn partial_engine_is_repaired_without_clearing_existing_files()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = TestDirectory::new()?;
+        directory.write_uv(
+            "#!/bin/sh\nif [ \"$1\" = \"venv\" ]; then\ncase \"$*\" in *--allow-existing*) ;; *) exit 9;; esac\nmkdir -p \"$2/bin\"\nprintf '' > \"$2/bin/python\"\nfi\nexit 0\n",
+        )?;
+        let venv = super::diarize_dir(&directory.0).join("venv");
+        std::fs::create_dir(&venv)?;
+        let preserved = venv.join("preserved.txt");
+        std::fs::write(&preserved, "cached content")?;
+        std::fs::write(super::engine_marker(&directory.0), "previous marker")?;
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let channel = tauri::ipc::Channel::new(move |body| {
+            let _ = sender.send(body);
+            Ok(())
+        });
+        super::ensure_engine(&directory.0, &channel)?;
+        let events = receiver
+            .try_iter()
+            .map(|body| body.deserialize::<serde_json::Value>())
+            .collect::<Result<Vec<_>, _>>()?;
+        assert_eq!(
+            events,
+            vec![
+                serde_json::json!({ "type": "stage", "name": "python" }),
+                serde_json::json!({ "type": "stage", "name": "packages" }),
+                serde_json::json!({ "type": "done" }),
+            ]
+        );
+        assert!(super::venv_python(&directory.0).is_file());
+        assert_eq!(std::fs::read_to_string(preserved)?, "cached content");
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn python_setup_failure_does_not_claim_package_installation_or_completion()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = TestDirectory::new()?;
+        directory.write_uv("#!/bin/sh\nprintf 'python setup failed\\n' >&2\nexit 1\n")?;
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let channel = tauri::ipc::Channel::new(move |body| {
+            let _ = sender.send(body);
+            Ok(())
+        });
+        let result = super::ensure_engine(&directory.0, &channel);
+        assert!(result.is_err());
+        assert!(!super::engine_marker(&directory.0).is_file());
+        let events = receiver
+            .try_iter()
+            .map(|body| body.deserialize::<serde_json::Value>())
+            .collect::<Result<Vec<_>, _>>()?;
+        assert_eq!(
+            events,
+            vec![serde_json::json!({ "type": "stage", "name": "python" })]
+        );
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ready_engine_skips_subprocesses()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = TestDirectory::new()?;
+        directory.write_uv("#!/bin/sh\nexit 1\n")?;
+        let python = super::venv_python(&directory.0);
+        let parent = python.parent().ok_or("python path has no parent")?;
+        std::fs::create_dir_all(parent)?;
+        std::fs::write(python, "")?;
+        std::fs::write(super::engine_marker(&directory.0), "ready")?;
+        let channel = tauri::ipc::Channel::new(|_| Ok(()));
+        super::ensure_engine(&directory.0, &channel)?;
+        assert_eq!(
+            std::fs::read_to_string(super::engine_marker(&directory.0))?,
+            "ready"
+        );
+        Ok(())
     }
 }

@@ -128,13 +128,10 @@ export async function getDiarizerStatus(): Promise<DiarizerStatus> {
 }
 
 export async function prepareDiarizer(
-  onEvent: (event: DiarizerPrepareEvent) => void
+  onEvent: (event: DiarizerPrepareEvent) => void,
+  force = false,
 ): Promise<void> {
-  const channel = new Channel<unknown>();
-  channel.onmessage = (message) => {
-    onEvent(DiarizerPrepareEventSchema.parse(message));
-  };
-  await invoke("prepare_diarizer", { force: true, onEvent: channel });
+  await invokeWithDownloadEvents("prepare_diarizer", { force }, DiarizerPrepareEventSchema, onEvent);
 }
 
 export async function getModelStatus(model: string): Promise<ModelStatus> {
@@ -145,11 +142,7 @@ export async function downloadModel(
   model: string,
   onEvent: (event: DownloadEvent) => void
 ): Promise<void> {
-  const channel = new Channel<unknown>();
-  channel.onmessage = (message) => {
-    onEvent(DownloadEventSchema.parse(message));
-  };
-  await invoke("download_model", { model, onEvent: channel });
+  await invokeWithDownloadEvents("download_model", { model }, DownloadEventSchema, onEvent);
 }
 
 export async function getFfmpegStatus(): Promise<FfmpegStatus> {
@@ -159,11 +152,46 @@ export async function getFfmpegStatus(): Promise<FfmpegStatus> {
 export async function downloadFfmpeg(
   onEvent: (event: DownloadEvent) => void
 ): Promise<void> {
+  await invokeWithDownloadEvents("download_ffmpeg", {}, DownloadEventSchema, onEvent);
+}
+
+async function invokeWithDownloadEvents<T extends { type: string }>(
+  command: string,
+  arguments_: Record<string, unknown>,
+  schema: z.ZodType<T>,
+  onEvent: (event: T) => void,
+): Promise<void> {
+  let active = true;
+  let eventError: Error | null = null;
   const channel = new Channel<unknown>();
   channel.onmessage = (message) => {
-    onEvent(DownloadEventSchema.parse(message));
+    if (!active) {
+      return;
+    }
+    try {
+      const event = schema.safeParse(message);
+      if (!event.success) {
+        throw event.error;
+      }
+      onEvent(event.data);
+      if (event.data.type === "done") {
+        active = false;
+      }
+    } catch (caught) {
+      eventError = Object.assign(new Error(toMessage(caught)), { cause: caught });
+      active = false;
+    }
   };
-  await invoke("download_ffmpeg", { onEvent: channel });
+  try {
+    await invoke(command, { ...arguments_, onEvent: channel });
+    if (eventError !== null) {
+      throw eventError;
+    }
+  } catch (caught) {
+    throw Object.assign(new Error(toMessage(caught)), { cause: caught });
+  } finally {
+    active = false;
+  }
 }
 
 export async function writeMarkdown(filename: string, content: string): Promise<string> {

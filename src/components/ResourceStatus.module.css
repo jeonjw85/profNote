@@ -1,0 +1,129 @@
+.resource {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 13px 14px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    min-width: 0;
+}
+
+.compact {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    gap: 8px;
+}
+
+.header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.copy {
+    min-width: 0;
+}
+
+.title {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.description {
+    margin: 4px 0 0;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--color-text-muted);
+}
+
+.status {
+    flex-shrink: 0;
+    color: var(--color-text-muted);
+    font-size: 11px;
+    line-height: 1.7;
+}
+
+.progress {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.progressCopy {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--color-text-muted);
+    font-size: 11.5px;
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+}
+
+.track {
+    height: 3px;
+    border-radius: 999px;
+    background: var(--color-border);
+    overflow: hidden;
+}
+
+.indeterminate {
+    background: repeating-linear-gradient(90deg, var(--color-text-muted) 0 6px, var(--color-border) 6px 12px);
+    opacity: 0.45;
+}
+
+.fill {
+    height: 100%;
+    background: var(--color-text-muted);
+}
+
+.bytes {
+    margin: 0;
+    font-size: 11px;
+    color: var(--color-text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.error {
+    margin: 0;
+    color: var(--color-text);
+    font-size: 11.5px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    max-height: 90px;
+    overflow-y: auto;
+}
+
+.action {
+    align-self: flex-start;
+    padding: 6px 11px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-size: 12px;
+    line-height: 1.4;
+    cursor: pointer;
+}
+
+.action:hover:not(:disabled) {
+    background: var(--color-surface-hover);
+}
+
+.action:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.action:focus-visible {
+    outline: 2px solid var(--color-text-muted);
+    outline-offset: 2px;
+}

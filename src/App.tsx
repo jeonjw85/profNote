@@ -1,7 +1,7 @@
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./App.module.css";
-import { Editor } from "./components/Editor";
+import { Editor, type EditorHandle } from "./components/Editor";
 import { NoteList } from "./components/NoteList";
 import { RecordBar } from "./components/RecordBar";
 import { SettingsModal } from "./components/SettingsModal";
@@ -10,29 +10,19 @@ import { useNotes } from "./hooks/useNotes";
 import { usePipeline } from "./hooks/usePipeline";
 import { useTickingNow } from "./hooks/useTickingNow";
 import { useRecorder } from "./hooks/useRecorder";
+import { useResources } from "./hooks/useResources";
+import { useAppUpdate } from "./hooks/useAppUpdate";
 import { buildProcessingView } from "./services/pipelineEta";
 import { I18nProvider } from "./i18n";
 import { useI18n } from "./i18n/context";
 import {
-    downloadFfmpeg,
-    downloadModel,
     fileNameWithoutExtension,
-    getDiarizerStatus,
-    getFfmpegStatus,
-    getModelStatus,
     importAudio,
     isImportableAudioPath,
-    prepareDiarizer,
 } from "./services/audio";
 import { fetchSettings, saveSettings } from "./services/db";
 import { toMessage } from "./services/errors";
-import { checkForUpdate, installPendingUpdate } from "./services/updater";
-import type { DownloadProgress, Settings } from "./types";
-
-type UpdateState =
-    | { status: "available"; version: string }
-    | { status: "installing"; percent: number | null }
-    | null;
+import type { Settings } from "./types";
 
 const DEFAULT_SETTINGS: Settings = {
     openaiApiKey: "",
@@ -98,22 +88,17 @@ function AppBody({
         removeNote,
     } = useNotes();
     const [settingsOpen, setSettingsOpen] = useState(false);
-    const [modelInstalled, setModelInstalled] = useState<boolean | null>(null);
-    const [ffmpegInstalled, setFfmpegInstalled] = useState<boolean | null>(
-        null,
-    );
-    const [download, setDownload] = useState<DownloadProgress | null>(null);
-    const [downloadKind, setDownloadKind] = useState<
-        "ffmpeg" | "model" | null
-    >(null);
-    const [diarizerReady, setDiarizerReady] = useState(false);
-    const [diarizerInstalling, setDiarizerInstalling] = useState(false);
-    const [diarizerProgress, setDiarizerProgress] = useState<string | null>(
-        null,
-    );
+    const [settingsSection, setSettingsSection] = useState<"preferences" | "downloads">("preferences");
     const [appError, setAppError] = useState<string | null>(null);
-    const [update, setUpdate] = useState<UpdateState>(null);
     const [dropActive, setDropActive] = useState(false);
+    const editorRef = useRef<EditorHandle | null>(null);
+    const flushEditor = useCallback(async () => {
+        try {
+            await editorRef.current?.flush();
+        } catch (caught) {
+            throw Object.assign(new Error(toMessage(caught)), { cause: caught });
+        }
+    }, []);
 
     const pipeline = usePipeline({
         settings: settings ?? DEFAULT_SETTINGS,
@@ -121,11 +106,20 @@ function AppBody({
         onNoteCreated: setSelectedId,
     });
     const recorder = useRecorder(pipeline.run);
+    const activityBusy = recorder.status !== "idle" || pipeline.pipeline !== null;
+    const resources = useResources({ blocked: activityBusy });
+    const updater = useAppUpdate({ blocked: activityBusy || resources.busy, beforeInstall: flushEditor, beforeRestart: flushEditor });
+    const updateBusy = updater.state.status === "downloading" || updater.state.status === "installing" || updater.state.status === "restarting";
+    const maintenanceBusy = resources.busy || updateBusy;
+    const modelState = resources.models[settings?.whisperModel ?? DEFAULT_SETTINGS.whisperModel];
+    const modelInstalled = modelState.status === "ready";
+    const ffmpegInstalled = resources.ffmpeg.status === "ready";
     const importGuardRef = useRef({
         recorderStatus: recorder.status,
         pipelineBusy: pipeline.pipeline !== null,
         modelInstalled,
         ffmpegInstalled,
+        maintenanceBusy,
         run: pipeline.run,
     });
 
@@ -135,6 +129,7 @@ function AppBody({
             pipelineBusy: pipeline.pipeline !== null,
             modelInstalled,
             ffmpegInstalled,
+            maintenanceBusy,
             run: pipeline.run,
         };
     }, [
@@ -142,6 +137,7 @@ function AppBody({
         pipeline.pipeline,
         modelInstalled,
         ffmpegInstalled,
+        maintenanceBusy,
         pipeline.run,
     ]);
 
@@ -165,6 +161,7 @@ function AppBody({
                         if (
                             guard.recorderStatus !== "idle" ||
                             guard.pipelineBusy ||
+                            guard.maintenanceBusy ||
                             guard.modelInstalled === false ||
                             guard.ffmpegInstalled === false
                         ) {
@@ -213,143 +210,22 @@ function AppBody({
             .catch((caught) => setAppError(toMessage(caught)));
     }, [setSettings]);
 
-    useEffect(() => {
-        checkForUpdate()
-            .then((found) => {
-                if (found) {
-                    setUpdate({ status: "available", version: found.version });
-                }
-            })
-            .catch(() => undefined);
-    }, []);
-
-    useEffect(() => {
-        if (!settings) {
-            return;
-        }
-        getModelStatus(settings.whisperModel)
-            .then((status) => setModelInstalled(status.installed))
-            .catch((caught) => setAppError(toMessage(caught)));
-        getFfmpegStatus()
-            .then((status) => setFfmpegInstalled(status.installed))
-            .catch((caught) => setAppError(toMessage(caught)));
-        getDiarizerStatus()
-            .then((status) => setDiarizerReady(status.ready))
-            .catch((caught) => setAppError(toMessage(caught)));
-    }, [settings]);
-
-    const handleDownloadModel = useCallback(async () => {
-        if (!settings || download) {
-            return;
-        }
-        setDownloadKind("model");
-        setDownload({ downloadedBytes: 0, totalBytes: null });
-        try {
-            await downloadModel(settings.whisperModel, (event) => {
-                if (event.type === "progress") {
-                    setDownload({
-                        downloadedBytes: event.downloadedBytes,
-                        totalBytes: event.totalBytes,
-                    });
-                }
-            });
-            setModelInstalled(true);
-        } catch (caught) {
-            setAppError(toMessage(caught));
-        } finally {
-            setDownload(null);
-            setDownloadKind(null);
-        }
-    }, [settings, download]);
-
-    const handleDownloadFfmpeg = useCallback(async () => {
-        if (download) {
-            return;
-        }
-        setDownloadKind("ffmpeg");
-        setDownload({ downloadedBytes: 0, totalBytes: null });
-        try {
-            await downloadFfmpeg((event) => {
-                if (event.type === "progress") {
-                    setDownload({
-                        downloadedBytes: event.downloadedBytes,
-                        totalBytes: event.totalBytes,
-                    });
-                }
-            });
-            setFfmpegInstalled(true);
-        } catch (caught) {
-            setAppError(toMessage(caught));
-        } finally {
-            setDownload(null);
-            setDownloadKind(null);
-        }
-    }, [download]);
-
     const handleSaveSettings = useCallback(
         async (next: Settings) => {
-            await saveSettings(next);
-            setSettings(next);
+            try {
+                await saveSettings(next);
+                setSettings(next);
+            } catch (caught) {
+                throw Object.assign(new Error(toMessage(caught)), { cause: caught });
+            }
         },
         [setSettings],
     );
 
-    const handleInstallDiarizer = useCallback(async () => {
-        if (diarizerInstalling) {
-            return;
-        }
-        setDiarizerInstalling(true);
-        setDiarizerProgress(t("diarizer.installing"));
-        try {
-            await prepareDiarizer((event) => {
-                if (event.type === "stage") {
-                    setDiarizerProgress(
-                        event.name === "uv"
-                            ? t("diarizer.runtime")
-                            : t("diarizer.engine"),
-                    );
-                } else if (event.type === "progress") {
-                    if (event.totalBytes === null) {
-                        return;
-                    }
-                    const percent = Math.min(
-                        100,
-                        Math.round(
-                            (event.downloadedBytes / event.totalBytes) * 100,
-                        ),
-                    );
-                    setDiarizerProgress(
-                        t("diarizer.runtimePercent", { percent }),
-                    );
-                }
-            });
-            setDiarizerReady(true);
-        } catch (caught) {
-            setAppError(toMessage(caught));
-        } finally {
-            setDiarizerInstalling(false);
-            setDiarizerProgress(null);
-        }
-    }, [diarizerInstalling, t]);
-
-    const handleInstallUpdate = useCallback(async () => {
-        setUpdate({ status: "installing", percent: null });
-        try {
-            await installPendingUpdate((downloadedBytes, totalBytes) => {
-                const percent =
-                    totalBytes === null
-                        ? null
-                        : Math.min(
-                              100,
-                              Math.round((downloadedBytes / totalBytes) * 100),
-                          );
-                setUpdate({ status: "installing", percent });
-            });
-        } catch (caught) {
-            setUpdate(null);
-            setAppError(toMessage(caught));
-        }
-    }, []);
+    const openSettings = (section: "preferences" | "downloads") => {
+        setSettingsSection(section);
+        setSettingsOpen(true);
+    };
 
     const now = useTickingNow(pipeline.pipeline !== null);
 
@@ -360,6 +236,21 @@ function AppBody({
     }
 
     const selectedNote = notes.find((note) => note.id === selectedId) ?? null;
+    const activeResource = resources.active === null ? null : {
+        title: resources.active.kind === "model"
+            ? t("resources.model", { model: resources.active.model })
+            : t(`resources.${resources.active.kind}`),
+        state: resources.active.state,
+    };
+    const updateNotice = updater.state.status === "available"
+        ? t("update.available", { version: updater.state.version ?? "" })
+        : updater.state.status === "restartReady"
+          ? t("update.restartReady")
+          : updater.state.status === "restarting"
+            ? t("update.restarting")
+          : updateBusy
+            ? t(updater.state.status === "installing" ? "update.applying" : "update.downloading")
+            : null;
     const processing =
         pipeline.pipeline === null
             ? null
@@ -396,20 +287,6 @@ function AppBody({
         };
     } else if (processing) {
         toast = { tone: "info", text: processing.statusText };
-    } else if (update?.status === "available") {
-        toast = {
-            tone: "info",
-            text: t("update.available", { version: update.version }),
-            dismiss: () => void handleInstallUpdate(),
-        };
-    } else if (update?.status === "installing") {
-        toast = {
-            tone: "info",
-            text:
-                update.percent === null
-                    ? t("update.downloading")
-                    : t("update.installing", { percent: update.percent }),
-        };
     }
 
     return (
@@ -420,7 +297,7 @@ function AppBody({
                     <button
                         type="button"
                         className={styles.settingsButton}
-                        onClick={() => setSettingsOpen(true)}
+                        onClick={() => openSettings("preferences")}
                         aria-label={t("app.settings")}
                     >
                         <GearIcon />
@@ -431,27 +308,43 @@ function AppBody({
                     selectedId={selectedId}
                     onSelect={setSelectedId}
                 />
+                {updateNotice !== null && (
+                    <button
+                        type="button"
+                        className={styles.updateNotice}
+                        onClick={() => openSettings("downloads")}
+                    >
+                        {updateNotice}
+                    </button>
+                )}
                 <RecordBar
                     recorderStatus={recorder.status}
                     elapsedMs={recorder.elapsedMs}
                     recorderError={recorder.error}
-                    modelReady={modelInstalled === true}
-                    ffmpegReady={ffmpegInstalled === true}
                     modelName={settings.whisperModel}
-                    download={download}
-                    downloadKind={downloadKind}
+                    modelState={modelState}
+                    ffmpegState={resources.ffmpeg}
+                    maintenanceBusy={maintenanceBusy}
+                    activeResource={activeResource}
                     processing={processing}
-                    onStart={() => void recorder.start()}
+                    onStart={() => {
+                        if (!activityBusy && !maintenanceBusy && modelInstalled && ffmpegInstalled) {
+                            void recorder.start();
+                        }
+                    }}
                     onStop={() => void recorder.stop()}
-                    onDownloadModel={() => void handleDownloadModel()}
-                    onDownloadFfmpeg={() => void handleDownloadFfmpeg()}
+                    onDownloadModel={() => { if (!updateBusy) { void resources.installModel(settings.whisperModel); } }}
+                    onDownloadFfmpeg={() => { if (!updateBusy) { void resources.installFfmpeg(); } }}
+                    onOpenDownloads={() => openSettings("downloads")}
                     onDismissError={recorder.dismissError}
                 />
             </aside>
             <main className={styles.main}>
                 {selectedNote ? (
                     <Editor
+                        ref={editorRef}
                         note={selectedNote}
+                        editingDisabled={updater.state.status === "installing" || updater.state.status === "restarting"}
                         liveTranscript={
                             pipeline.preview?.noteId === selectedNote.id
                                 ? pipeline.preview.transcript
@@ -462,9 +355,7 @@ function AppBody({
                                 ? pipeline.preview.summary
                                 : null
                         }
-                        onPatch={(patch) =>
-                            void patchNote(selectedNote.id, patch)
-                        }
+                        onPatch={(patch) => patchNote(selectedNote.id, patch)}
                         onDelete={() => void removeNote(selectedNote.id)}
                         onRegenerateSummary={() =>
                             void pipeline.regenerateSummary(selectedNote)
@@ -491,10 +382,19 @@ function AppBody({
                     settings={settings}
                     onSave={handleSaveSettings}
                     onClose={() => setSettingsOpen(false)}
-                    diarizerReady={diarizerReady}
-                    diarizerInstalling={diarizerInstalling}
-                    diarizerProgress={diarizerProgress}
-                    onInstallDiarizer={() => void handleInstallDiarizer()}
+                    initialSection={settingsSection}
+                    models={resources.models}
+                    ffmpeg={resources.ffmpeg}
+                    diarizer={resources.diarizer}
+                    update={updater.state}
+                    maintenanceBusy={maintenanceBusy}
+                    activityBusy={activityBusy}
+                    onDownloadModel={(model) => { if (!updateBusy) { void resources.installModel(model); } }}
+                    onDownloadFfmpeg={() => { if (!updateBusy) { void resources.installFfmpeg(); } }}
+                    onInstallDiarizer={() => { if (!updateBusy) { void resources.installDiarizer(); } }}
+                    onCheckUpdate={() => void updater.check()}
+                    onInstallUpdate={() => void updater.install()}
+                    onRestart={() => void updater.restart()}
                 />
             )}
             {toast && (

@@ -45,6 +45,9 @@ export function useNotes() {
         await refresh();
       } catch (caught) {
         setLoadError(toMessage(caught));
+        throw caught instanceof Error
+          ? caught
+          : Object.assign(new Error(toMessage(caught)), { cause: caught });
       }
     },
     [refresh]

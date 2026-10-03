@@ -1,10 +1,12 @@
 import {
     useCallback,
     useEffect,
+    useImperativeHandle,
     useMemo,
     useRef,
     useState,
     type ChangeEvent,
+    type Ref,
 } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -24,9 +26,14 @@ import {
     summarizeSpeakers,
 } from "../services/transcript";
 
+export interface EditorHandle {
+    flush: () => Promise<void>;
+}
+
 interface EditorProps {
+    ref?: Ref<EditorHandle>;
     note: Note;
-    onPatch: (patch: NotePatch) => void;
+    onPatch: (patch: NotePatch) => Promise<void>;
     onDelete: () => void;
     onRegenerateSummary: () => void;
     regenerating: boolean;
@@ -34,6 +41,7 @@ interface EditorProps {
     processingHint: string | null;
     liveTranscript: string | null;
     liveSummary: string | null;
+    editingDisabled?: boolean;
 }
 
 const TIMESTAMP_PREFIX = /^\[(\d{2,}:\d{2}:\d{2}|\d{2}:\d{2})\](?: |$)/;
@@ -103,6 +111,7 @@ function bodyPlaceholder(
 }
 
 export function Editor({
+    ref,
     note,
     onPatch,
     onDelete,
@@ -112,6 +121,7 @@ export function Editor({
     processingHint,
     liveTranscript,
     liveSummary,
+    editingDisabled = false,
 }: EditorProps) {
     const { t } = useI18n();
     const statusText: Record<NoteStatus, string> = {
@@ -143,6 +153,8 @@ export function Editor({
     const [duration, setDuration] = useState(0);
     const [audioFailed, setAudioFailed] = useState(false);
     const audioRef = useRef<HTMLAudioElement>(null);
+    const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pendingSaveRef = useRef<Promise<void> | null>(null);
 
     if (syncedId !== note.id) {
         setSyncedId(note.id);
@@ -211,17 +223,12 @@ export function Editor({
         return () => clearTimeout(timer);
     }, [confirmingDelete]);
 
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            const patch: NotePatch = {};
-            if (title !== note.title) patch.title = title;
-            if (summary !== note.summary_md) patch.summary_md = summary;
-            if (transcript !== note.transcript) patch.transcript = transcript;
-            if (Object.keys(patch).length > 0) {
-                onPatch(patch);
-            }
-        }, EDIT_DEBOUNCE_MS);
-        return () => clearTimeout(timer);
+    const buildPatch = useCallback((): NotePatch => {
+        const patch: NotePatch = {};
+        if (title !== note.title) patch.title = title;
+        if (summary !== note.summary_md) patch.summary_md = summary;
+        if (transcript !== note.transcript) patch.transcript = transcript;
+        return patch;
     }, [
         title,
         summary,
@@ -229,8 +236,48 @@ export function Editor({
         note.title,
         note.summary_md,
         note.transcript,
-        onPatch,
     ]);
+
+    const persistPatch = useCallback((patch: NotePatch): Promise<void> => {
+        const pending = pendingSaveRef.current;
+        const save = (pending ?? Promise.resolve())
+            .catch(() => undefined)
+            .then(() => onPatch(patch));
+        pendingSaveRef.current = save;
+        const clearPending = () => {
+            if (pendingSaveRef.current === save) pendingSaveRef.current = null;
+        };
+        void save.then(clearPending, clearPending);
+        return save;
+    }, [onPatch]);
+
+    const flush = useCallback(async () => {
+        if (autosaveTimerRef.current !== null) {
+            clearTimeout(autosaveTimerRef.current);
+            autosaveTimerRef.current = null;
+        }
+        await pendingSaveRef.current;
+        const patch = buildPatch();
+        if (Object.keys(patch).length > 0) await persistPatch(patch);
+    }, [buildPatch, persistPatch]);
+
+    useImperativeHandle(ref, () => ({ flush }), [flush]);
+
+    useEffect(() => {
+        if (editingDisabled) return;
+        const timer = setTimeout(() => {
+            autosaveTimerRef.current = null;
+            const patch = buildPatch();
+            if (Object.keys(patch).length > 0) {
+                void persistPatch(patch).catch(() => undefined);
+            }
+        }, EDIT_DEBOUNCE_MS);
+        autosaveTimerRef.current = timer;
+        return () => {
+            clearTimeout(timer);
+            if (autosaveTimerRef.current === timer) autosaveTimerRef.current = null;
+        };
+    }, [buildPatch, persistPatch, editingDisabled]);
 
     const handleDelete = () => {
         if (confirmingDelete) {
@@ -280,7 +327,7 @@ export function Editor({
     }, []);
 
     const handleProfessorChange = (speaker: string) => {
-        if (!speakerData || speaker === professor) {
+        if (editingDisabled || !speakerData || speaker === professor) {
             return;
         }
         setProfessor(speaker);
@@ -289,11 +336,13 @@ export function Editor({
             speakerData.speakers,
             speaker,
         );
-        onPatch({
+        setTranscript(rebuilt);
+        setSummary("");
+        void persistPatch({
             transcript: rebuilt,
             professor_speaker: speaker,
             summary_md: "",
-        });
+        }).catch(() => undefined);
     };
 
     return (
@@ -302,6 +351,7 @@ export function Editor({
                 <input
                     className={styles.titleInput}
                     value={title}
+                    readOnly={editingDisabled}
                     onChange={(event) => setTitle(event.target.value)}
                     placeholder={t("editor.title.placeholder")}
                     aria-label={t("editor.aria.title")}
@@ -312,6 +362,7 @@ export function Editor({
                             {t("editor.professor")}
                             <select
                                 value={professor ?? ""}
+                                disabled={editingDisabled}
                                 onChange={(event) =>
                                     handleProfessorChange(event.target.value)
                                 }
@@ -335,6 +386,7 @@ export function Editor({
                     <button
                         type="button"
                         onClick={() => setPreview((value) => !value)}
+                        disabled={editingDisabled}
                     >
                         {preview ? t("editor.edit") : t("editor.preview")}
                     </button>
@@ -342,6 +394,7 @@ export function Editor({
                         <button
                             type="button"
                             disabled={
+                                editingDisabled ||
                                 pipelineActive ||
                                 regenerating ||
                                 note.status === "transcribing"
@@ -356,6 +409,7 @@ export function Editor({
                         className={styles.danger}
                         data-confirm={confirmingDelete || undefined}
                         onClick={handleDelete}
+                        disabled={editingDisabled}
                     >
                         {confirmingDelete
                             ? t("editor.delete.confirm")
@@ -444,7 +498,7 @@ export function Editor({
                     <textarea
                         className={styles.textarea}
                         value={tab === "summary" ? liveSummary ?? summary : liveTranscript ?? transcript}
-                        readOnly={tab === "summary" ? liveSummary !== null : liveTranscript !== null}
+                        readOnly={editingDisabled || (tab === "summary" ? liveSummary !== null : liveTranscript !== null)}
                         onChange={(event) =>
                             tab === "summary"
                                 ? setSummary(event.target.value)
