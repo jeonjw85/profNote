@@ -17,6 +17,9 @@ const MAX_ATTEMPTS = 5;
 const BASE_DELAY_MS = 1000;
 const MAX_TRANSCRIPT_CHARS = 360_000;
 const CHUNK_CHARS = 30_000;
+const CHUNK_CONCURRENCY = 2;
+const STREAM_UPDATE_INTERVAL_MS = 100;
+const deltaSchema = z.string();
 
 export class ApiError extends Error {
   readonly retryable: boolean;
@@ -90,7 +93,12 @@ export async function summarizeTranscript(
   endpoint: LlmEndpoint,
   transcript: string,
   language: SummaryLanguage,
-  onProgress?: (receivedChars: number) => void
+  onProgress?: (
+    receivedChars: number,
+    completedRequests: number,
+    totalRequests: number
+  ) => void,
+  onContent?: (content: string) => void
 ): Promise<string> {
   const trimmed =
     transcript.length > MAX_TRANSCRIPT_CHARS
@@ -100,40 +108,79 @@ export async function summarizeTranscript(
   const model = endpoint.model.trim() || DEFAULT_MODEL;
   const chunks = splitTranscript(trimmed);
   if (chunks.length <= 1) {
-    return withRetry(() =>
-      requestChat(apiKey, url, model, systemPrompt(language), trimmed, onProgress)
-    );
-  }
-  let received = 0;
-  const parts: string[] = [];
-  for (const [index, chunk] of chunks.entries()) {
-    const part = await withRetry(() =>
+    const summary = await withRetry(() =>
       requestChat(
         apiKey,
         url,
         model,
-        chunkSystemPrompt(language),
-        chunkUserContent(language, index + 1, chunks.length, chunk),
-        (chars) => onProgress?.(received + chars)
+        systemPrompt(language),
+        trimmed,
+        (chars) => onProgress?.(chars, 0, 1),
+        onContent
       )
     );
-    received += part.length;
-    parts.push(part);
-    onProgress?.(received);
+    onProgress?.(summary.length, 1, 1);
+    return summary;
   }
+  const totalRequests = chunks.length + 1;
+  let completedRequests = 0;
+  const receivedByChunk = chunks.map(() => 0);
+  const publishChunkProgress = () =>
+    onProgress?.(
+      receivedByChunk.reduce((total, count) => total + count, 0),
+      completedRequests,
+      totalRequests
+    );
+  publishChunkProgress();
+  const parts: string[] = [];
+  for (let start = 0; start < chunks.length; start += CHUNK_CONCURRENCY) {
+    const results = await Promise.allSettled(
+      chunks.slice(start, start + CHUNK_CONCURRENCY).map((chunk, offset) => {
+        const index = start + offset;
+        return withRetry(() =>
+          requestChat(
+            apiKey,
+            url,
+            model,
+            chunkSystemPrompt(language),
+            chunkUserContent(language, index + 1, chunks.length, chunk),
+            (chars) => {
+              receivedByChunk[index] = chars;
+              publishChunkProgress();
+            }
+          )
+        ).then((part) => {
+          completedRequests += 1;
+          receivedByChunk[index] = part.length;
+          publishChunkProgress();
+          return part;
+        });
+      })
+    );
+    for (const result of results) {
+      if (result.status === "rejected") {
+        throw result.reason;
+      }
+      parts.push(result.value);
+    }
+  }
+  const received = parts.reduce((total, part) => total + part.length, 0);
   const combinedInput = parts
     .map((part, index) => `${combinePartHeading(language, index + 1)}\n\n${part}`)
     .join("\n\n");
-  return withRetry(() =>
+  const summary = await withRetry(() =>
     requestChat(
       apiKey,
       url,
       model,
       combineSystemPrompt(language),
       combinedInput,
-      (chars) => onProgress?.(received + chars)
+      (chars) => onProgress?.(received + chars, completedRequests, totalRequests),
+      onContent
     )
   );
+  onProgress?.(received + summary.length, totalRequests, totalRequests);
+  return summary;
 }
 
 async function requestChat(
@@ -142,13 +189,31 @@ async function requestChat(
   model: string,
   systemPrompt: string,
   userContent: string,
-  onProgress?: (receivedChars: number) => void
+  onProgress?: (receivedChars: number) => void,
+  onContent?: (content: string) => void
 ): Promise<string> {
   let content = "";
+  let lastUpdateAt = 0;
+  let invalidDelta = false;
   const channel = new Channel<unknown>();
-  channel.onmessage = (message) => {
-    content += z.string().parse(message);
+  const publishContent = () => {
     onProgress?.(content.length);
+    onContent?.(content);
+  };
+  onProgress?.(0);
+  onContent?.("");
+  channel.onmessage = (message) => {
+    const parsed = deltaSchema.safeParse(message);
+    if (!parsed.success) {
+      invalidDelta = true;
+      return;
+    }
+    content += parsed.data;
+    const now = Date.now();
+    if (now - lastUpdateAt >= STREAM_UPDATE_INTERVAL_MS) {
+      lastUpdateAt = now;
+      publishContent();
+    }
   };
   try {
     await invoke("stream_llm_chat", {
@@ -160,11 +225,18 @@ async function requestChat(
       onDelta: channel,
     });
   } catch (error) {
-    throw toApiError(toMessage(error));
+    const apiError = toApiError(toMessage(error));
+    throw content.length > 0
+      ? new ApiError(apiError.message, false)
+      : apiError;
+  }
+  if (invalidDelta) {
+    throw new ApiError("요약 응답 형식이 올바르지 않습니다", false);
   }
   if (content.trim().length === 0) {
     throw new ApiError("요약 응답이 비어 있습니다", true);
   }
+  publishContent();
   return content;
 }
 

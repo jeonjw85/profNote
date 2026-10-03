@@ -1,5 +1,7 @@
+use std::ffi::{CStr, c_void};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use serde::Serialize;
 use tauri::ipc::Channel;
@@ -11,8 +13,7 @@ use crate::sidecar::ffmpeg::TARGET_SAMPLE_RATE;
 pub const SUPPORTED_MODELS: &[&str] = &["medium", "large-v3", "large-v3-turbo"];
 
 const MODEL_BASE_URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
-const KO_INITIAL_PROMPT: &str =
-    "한국어 대학 강의 전사록입니다. 교수님이 전공 개념과 이론을 설명하고, 과제와 시험 일정을 안내합니다.";
+const KO_INITIAL_PROMPT: &str = "한국어 대학 강의 전사록입니다. 교수님이 전공 개념과 이론을 설명하고, 과제와 시험 일정을 안내합니다.";
 const DOWNLOAD_CHUNK_BYTES: usize = 256 * 1024;
 const PROGRESS_EVENT_BYTES: u64 = 256 * 1024;
 const MAX_REDIRECTS: u32 = 5;
@@ -26,7 +27,11 @@ pub struct ModelStatus {
 }
 
 #[derive(Debug, Clone, Serialize)]
-#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum DownloadEvent {
     Progress {
         downloaded_bytes: u64,
@@ -38,11 +43,16 @@ pub enum DownloadEvent {
 }
 
 #[derive(Debug, Clone, Serialize)]
-#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum SttEvent {
     Loading,
     Started,
     Progress { percent: u32 },
+    Segments { segments: Vec<TranscriptSegment> },
     Finished,
 }
 
@@ -67,6 +77,87 @@ pub struct SttState {
     loaded_model: Option<PathBuf>,
 }
 
+struct SttCallbackProgress {
+    last_percent: i32,
+    last_segment: i32,
+}
+
+struct SttCallbacks {
+    channel: Channel<SttEvent>,
+    progress: Mutex<SttCallbackProgress>,
+}
+
+unsafe extern "C" fn stt_progress_callback(
+    _: *mut whisper_rs::whisper_rs_sys::whisper_context,
+    _: *mut whisper_rs::whisper_rs_sys::whisper_state,
+    percent: i32,
+    user_data: *mut c_void,
+) {
+    // The owner keeps userdata alive until synchronous full() returns.
+    let Some(callbacks) = (unsafe { user_data.cast::<SttCallbacks>().as_ref() }) else {
+        return;
+    };
+    let Ok(mut progress) = callbacks.progress.lock() else {
+        return;
+    };
+    let percent = percent.clamp(0, 100);
+    if percent != progress.last_percent {
+        progress.last_percent = percent;
+        let _ = callbacks.channel.send(SttEvent::Progress {
+            percent: percent as u32,
+        });
+    }
+}
+
+unsafe extern "C" fn stt_segment_callback(
+    _: *mut whisper_rs::whisper_rs_sys::whisper_context,
+    state: *mut whisper_rs::whisper_rs_sys::whisper_state,
+    n_new: i32,
+    user_data: *mut c_void,
+) {
+    if state.is_null() || n_new <= 0 {
+        return;
+    }
+    // Whisper owns state and its segment strings for the callback; userdata stays owned by transcribe.
+    let Some(callbacks) = (unsafe { user_data.cast::<SttCallbacks>().as_ref() }) else {
+        return;
+    };
+    let Ok(mut progress) = callbacks.progress.lock() else {
+        return;
+    };
+    // The callback reads completed segments without mutating Whisper state.
+    let segments = unsafe {
+        let count = whisper_rs::whisper_rs_sys::whisper_full_n_segments_from_state(state);
+        let start = count.saturating_sub(n_new).max(0);
+        let mut segments = Vec::new();
+        for index in start..count {
+            if index <= progress.last_segment {
+                continue;
+            }
+            progress.last_segment = index;
+            let raw =
+                whisper_rs::whisper_rs_sys::whisper_full_get_segment_text_from_state(state, index);
+            if raw.is_null() {
+                continue;
+            }
+            let Ok(text) = CStr::from_ptr(raw).to_str() else {
+                continue;
+            };
+            let start =
+                whisper_rs::whisper_rs_sys::whisper_full_get_segment_t0_from_state(state, index);
+            let end =
+                whisper_rs::whisper_rs_sys::whisper_full_get_segment_t1_from_state(state, index);
+            if let Some(segment) = transcript_segment(start, end, text) {
+                segments.push(segment);
+            }
+        }
+        segments
+    };
+    if !segments.is_empty() {
+        let _ = callbacks.channel.send(SttEvent::Segments { segments });
+    }
+}
+
 impl SttState {
     pub fn new() -> Self {
         SttState {
@@ -78,9 +169,7 @@ impl SttState {
 
 pub fn model_path(models_dir: &Path, name: &str) -> Result<PathBuf, AppError> {
     if !SUPPORTED_MODELS.contains(&name) {
-        return Err(AppError::InvalidInput(format!(
-            "unsupported model: {name}"
-        )));
+        return Err(AppError::InvalidInput(format!("unsupported model: {name}")));
     }
     Ok(models_dir.join(format!("ggml-{name}.bin")))
 }
@@ -202,11 +291,13 @@ fn fetch_following_redirects(url: &str) -> Result<ureq::http::Response<ureq::Bod
         }
         current_url = location.to_string();
     }
-    Err(AppError::Download("too many redirects while downloading model".into()))
+    Err(AppError::Download(
+        "too many redirects while downloading model".into(),
+    ))
 }
 
 fn detect_language_name(state: &whisper_rs::WhisperState) -> Option<String> {
-    let (language_id, _) = state.lang_detect(0, 4).ok()?;
+    let language_id = state.full_lang_id_from_state();
     let raw = unsafe { whisper_rs::whisper_rs_sys::whisper_lang_str(language_id) };
     if raw.is_null() {
         return None;
@@ -236,10 +327,8 @@ fn read_wav_16k_mono(path: &Path) -> Result<Vec<f32>, AppError> {
     }
     let samples = reader
         .into_samples::<i16>()
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter()
-        .map(|sample| f32::from(sample) / 32768.0)
-        .collect();
+        .map(|sample| sample.map(|value| f32::from(value) / 32768.0))
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(samples)
 }
 
@@ -249,6 +338,7 @@ fn load_context(state: &mut SttState, model: &Path) -> Result<(), AppError> {
     }
     let mut context_params = WhisperContextParameters::default();
     context_params.use_gpu(true);
+    context_params.flash_attn(true);
     let context = WhisperContext::new_with_params(model, context_params)
         .map_err(|e| AppError::Model(e.to_string()))?;
     state.context = Some(context);
@@ -277,7 +367,7 @@ pub fn transcribe(
     let detect_language = language == "auto";
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
     if detect_language {
-        params.set_detect_language(true);
+        params.set_language(None);
     } else {
         params.set_language(Some(language));
     }
@@ -290,21 +380,29 @@ pub fn transcribe(
     params.set_print_timestamps(false);
     params.set_translate(false);
 
-    let event_channel = on_event.clone();
-    let mut last_percent: i32 = -1;
-    params.set_progress_callback_safe(move |percent| {
-        if percent != last_percent {
-            last_percent = percent;
-            let _ = event_channel.send(SttEvent::Progress {
-                percent: percent.max(0) as u32,
-            });
-        }
+    let callbacks = Box::new(SttCallbacks {
+        channel: on_event.clone(),
+        progress: Mutex::new(SttCallbackProgress {
+            last_percent: -1,
+            last_segment: -1,
+        }),
     });
+    let callback_data = std::ptr::from_ref(callbacks.as_ref())
+        .cast_mut()
+        .cast::<c_void>();
+    // Box owns a stable, synchronized callback address throughout synchronous full().
+    unsafe {
+        params.set_progress_callback(Some(stt_progress_callback));
+        params.set_progress_callback_user_data(callback_data);
+        params.set_new_segment_callback(Some(stt_segment_callback));
+        params.set_new_segment_callback_user_data(callback_data);
+    }
 
     let _ = on_event.send(SttEvent::Started);
     whisper_state
         .full(params, &samples)
         .map_err(|e| AppError::Transcription(e.to_string()))?;
+    drop(callbacks);
 
     let segment_count = whisper_state.full_n_segments();
     let mut segments = Vec::new();
@@ -315,21 +413,17 @@ pub fn transcribe(
             .ok_or_else(|| AppError::Transcription(format!("segment {index} out of range")))?;
         let segment_text = segment
             .to_str()
-            .map_err(|e| AppError::Transcription(e.to_string()))?
-            .trim()
-            .to_string();
-        if segment_text.is_empty() {
+            .map_err(|e| AppError::Transcription(e.to_string()))?;
+        let Some(segment) = transcript_segment(
+            segment.start_timestamp(),
+            segment.end_timestamp(),
+            segment_text,
+        ) else {
             continue;
-        }
-        let start = segment.start_timestamp();
-        let end = segment.end_timestamp();
-        segments.push(TranscriptSegment {
-            start_ms: (start.max(0) * 10) as u64,
-            end_ms: (end.max(0) * 10) as u64,
-            text: segment_text.clone(),
-        });
-        text.push_str(&segment_text);
+        };
+        text.push_str(&segment.text);
         text.push('\n');
+        segments.push(segment);
     }
 
     let resolved_language = if detect_language {
@@ -346,10 +440,28 @@ pub fn transcribe(
     })
 }
 
+fn transcript_segment(start: i64, end: i64, text: &str) -> Option<TranscriptSegment> {
+    let text = text.trim();
+    if text.is_empty() {
+        return None;
+    }
+    Some(TranscriptSegment {
+        start_ms: (start.max(0) as u64).saturating_mul(10),
+        end_ms: (end.max(0) as u64).saturating_mul(10),
+        text: text.to_string(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{model_path, model_url, DownloadEvent, SttEvent, SUPPORTED_MODELS};
+    use super::{
+        DownloadEvent, SUPPORTED_MODELS, SttCallbackProgress, SttCallbacks, SttEvent, model_path,
+        model_url, stt_progress_callback, transcript_segment,
+    };
+    use std::ffi::c_void;
     use std::path::Path;
+    use std::sync::{Arc, Mutex, mpsc};
+    use tauri::ipc::Channel;
 
     #[test]
     fn turbo_model_is_supported_and_maps_to_expected_file() {
@@ -395,6 +507,74 @@ mod tests {
     fn stt_progress_event_matches_frontend_schema() -> Result<(), serde_json::Error> {
         let json = serde_json::to_string(&SttEvent::Progress { percent: 42 })?;
         assert_eq!(json, r#"{"type":"progress","percent":42}"#);
+        Ok(())
+    }
+
+    #[test]
+    fn streamed_segments_use_final_transcript_normalization() -> Result<(), serde_json::Error> {
+        let segment = transcript_segment(-1, 125, "  강의 내용입니다. \n");
+        assert!(segment.is_some());
+        let json = serde_json::to_string(&SttEvent::Segments {
+            segments: segment.into_iter().collect(),
+        })?;
+        assert_eq!(
+            json,
+            r#"{"type":"segments","segments":[{"startMs":0,"endMs":1250,"text":"강의 내용입니다."}]}"#
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn empty_segments_are_not_streamed_or_saved() {
+        assert!(transcript_segment(0, 100, " \n\t ").is_none());
+    }
+
+    #[test]
+    fn raw_progress_callback_deduplicates_and_releases_channel() -> Result<(), serde_json::Error> {
+        let lease = Arc::new(());
+        let weak_lease = Arc::downgrade(&lease);
+        let (sender, receiver) = mpsc::channel();
+        let channel = Channel::new(move |body| {
+            let _ = &lease;
+            let _ = sender.send(body);
+            Ok(())
+        });
+        let callbacks = Box::new(SttCallbacks {
+            channel,
+            progress: Mutex::new(SttCallbackProgress {
+                last_percent: -1,
+                last_segment: -1,
+            }),
+        });
+        let callback_data = std::ptr::from_ref(callbacks.as_ref())
+            .cast_mut()
+            .cast::<c_void>();
+        for percent in [-4, 0, 40, 40, 101, 100] {
+            // The test owns valid callback userdata; progress never reads Whisper pointers.
+            unsafe {
+                stt_progress_callback(
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    percent,
+                    callback_data,
+                );
+            }
+        }
+        let events = receiver
+            .try_iter()
+            .map(|body| body.deserialize::<serde_json::Value>())
+            .collect::<Result<Vec<_>, _>>()?;
+        assert_eq!(
+            events,
+            vec![
+                serde_json::json!({ "type": "progress", "percent": 0 }),
+                serde_json::json!({ "type": "progress", "percent": 40 }),
+                serde_json::json!({ "type": "progress", "percent": 100 }),
+            ]
+        );
+        assert!(weak_lease.upgrade().is_some());
+        drop(callbacks);
+        assert!(weak_lease.upgrade().is_none());
         Ok(())
     }
 }

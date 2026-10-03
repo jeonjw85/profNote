@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   DiarizerPrepareEventSchema,
   DiarizerStatusSchema,
+  DiarizationEventSchema,
   DownloadEventSchema,
   FfmpegStatusSchema,
   ModelStatusSchema,
@@ -13,6 +14,7 @@ import {
   TranscriptSchema,
   type DiarizerPrepareEvent,
   type DiarizerStatus,
+  type DiarizationEvent,
   type DownloadEvent,
   type FfmpegStatus,
   type ModelStatus,
@@ -22,6 +24,7 @@ import {
   type SttEvent,
   type Transcript,
 } from "../types";
+import { toMessage } from "./errors";
 
 export async function startRecording(): Promise<RecordingStarted> {
   return RecordingStartedSchema.parse(await invoke("start_recording"));
@@ -92,13 +95,32 @@ export async function transcribeAudio(
 
 export async function runDiarization(
   wavPath: string,
-  huggingFaceToken: string
+  huggingFaceToken: string,
+  onEvent?: (event: DiarizationEvent) => void,
 ): Promise<SpeakerSegment[]> {
-  const segments = await invoke("run_diarization", {
-    wavPath,
-    hfToken: huggingFaceToken.length > 0 ? huggingFaceToken : null,
-  });
-  return z.array(SpeakerSegmentSchema).parse(segments);
+  let invalidEvent: Error | null = null;
+  const channel = new Channel<unknown>();
+  channel.onmessage = (message) => {
+    try {
+      const event = DiarizationEventSchema.parse(message);
+      onEvent?.(event);
+    } catch (caught) {
+      invalidEvent = Object.assign(new Error(toMessage(caught)), { cause: caught });
+    }
+  };
+  try {
+    const segments = await invoke("run_diarization", {
+      wavPath,
+      hfToken: huggingFaceToken.length > 0 ? huggingFaceToken : null,
+      onEvent: channel,
+    });
+    if (invalidEvent !== null) {
+      throw invalidEvent;
+    }
+    return z.array(SpeakerSegmentSchema).parse(segments);
+  } catch (caught) {
+    throw Object.assign(new Error(toMessage(caught)), { cause: caught });
+  }
 }
 
 export async function getDiarizerStatus(): Promise<DiarizerStatus> {

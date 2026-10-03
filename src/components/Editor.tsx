@@ -32,6 +32,8 @@ interface EditorProps {
     regenerating: boolean;
     pipelineActive: boolean;
     processingHint: string | null;
+    liveTranscript: string | null;
+    liveSummary: string | null;
 }
 
 const TIMESTAMP_PREFIX = /^\[(\d{2,}:\d{2}:\d{2}|\d{2}:\d{2})\](?: |$)/;
@@ -108,6 +110,8 @@ export function Editor({
     regenerating,
     pipelineActive,
     processingHint,
+    liveTranscript,
+    liveSummary,
 }: EditorProps) {
     const { t } = useI18n();
     const statusText: Record<NoteStatus, string> = {
@@ -187,9 +191,11 @@ export function Editor({
     const speakerOptions = speakerData
         ? summarizeSpeakers(speakerData.speakers)
         : [];
+    const displayedTranscript = liveTranscript ?? note.transcript;
+    const displayedSummary = liveSummary ?? note.summary_md;
     const transcriptBlocks = useMemo(
-        () => parseTranscriptBlocks(note.transcript),
-        [note.transcript],
+        () => parseTranscriptBlocks(displayedTranscript),
+        [displayedTranscript],
     );
     const audioInteractive = note.audio_path !== null && !audioFailed;
     const seekable = Number.isFinite(duration) && duration > 0;
@@ -377,9 +383,9 @@ export function Editor({
                 {preview ? (
                     tab === "summary" ? (
                         <div className={styles.preview}>
-                            {note.summary_md.length > 0 ? (
+                            {displayedSummary.length > 0 ? (
                                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                    {note.summary_md}
+                                    {displayedSummary}
                                 </ReactMarkdown>
                             ) : (
                                 <p className={styles.placeholder}>
@@ -390,7 +396,7 @@ export function Editor({
                         </div>
                     ) : (
                         <div className={styles.preview}>
-                            {note.transcript.length > 0 ? (
+                            {displayedTranscript.length > 0 ? (
                                 <div className={styles.transcriptText}>
                                     {transcriptBlocks.map((block, index) => (
                                         <span key={index}>
@@ -437,7 +443,8 @@ export function Editor({
                 ) : (
                     <textarea
                         className={styles.textarea}
-                        value={tab === "summary" ? summary : transcript}
+                        value={tab === "summary" ? liveSummary ?? summary : liveTranscript ?? transcript}
+                        readOnly={tab === "summary" ? liveSummary !== null : liveTranscript !== null}
                         onChange={(event) =>
                             tab === "summary"
                                 ? setSummary(event.target.value)

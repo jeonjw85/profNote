@@ -366,7 +366,6 @@ function AppBody({
             : buildProcessingView({
                   state: pipeline.pipeline,
                   nowMs: now,
-                  whisperModel: settings.whisperModel,
                   t,
               });
 
@@ -453,6 +452,16 @@ function AppBody({
                 {selectedNote ? (
                     <Editor
                         note={selectedNote}
+                        liveTranscript={
+                            pipeline.preview?.noteId === selectedNote.id
+                                ? pipeline.preview.transcript
+                                : null
+                        }
+                        liveSummary={
+                            pipeline.preview?.noteId === selectedNote.id
+                                ? pipeline.preview.summary
+                                : null
+                        }
                         onPatch={(patch) =>
                             void patchNote(selectedNote.id, patch)
                         }

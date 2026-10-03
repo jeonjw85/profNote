@@ -201,12 +201,17 @@ fn get_diarizer_status(state: State<'_, AppState>) -> sidecar::diarizer::Diarize
 }
 
 #[tauri::command]
-fn prepare_diarizer(
+async fn prepare_diarizer(
     state: State<'_, AppState>,
     force: bool,
     on_event: Channel<sidecar::diarizer::DiarizerPrepareEvent>,
 ) -> Result<(), AppError> {
-    sidecar::diarizer::prepare(&state.data_dir, &on_event, force)
+    let data_dir = state.data_dir.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        sidecar::diarizer::prepare(&data_dir, &on_event, force)
+    })
+    .await
+    .map_err(|error| AppError::Diarization(error.to_string()))?
 }
 
 #[tauri::command]
@@ -214,6 +219,7 @@ async fn run_diarization(
     state: State<'_, AppState>,
     wav_path: String,
     hf_token: Option<String>,
+    on_event: Channel<sidecar::diarizer::DiarizationEvent>,
 ) -> Result<Vec<sidecar::diarizer::SpeakerSegment>, AppError> {
     let wav = PathBuf::from(&wav_path);
     if !wav.exists() {
@@ -223,14 +229,14 @@ async fn run_diarization(
     }
     let data_dir = state.data_dir.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        sidecar::diarizer::run_diarization(&data_dir, &wav, hf_token.as_deref())
+        sidecar::diarizer::run_diarization(&data_dir, &wav, hf_token.as_deref(), &on_event)
     })
     .await
     .map_err(|error| AppError::Diarization(error.to_string()))?
 }
 
 #[tauri::command]
-fn stream_llm_chat(
+async fn stream_llm_chat(
     url: String,
     api_key: String,
     model: String,
@@ -238,14 +244,18 @@ fn stream_llm_chat(
     user_content: String,
     on_delta: Channel<String>,
 ) -> Result<(), AppError> {
-    llm::stream_chat(
-        &url,
-        &api_key,
-        &model,
-        &system_prompt,
-        &user_content,
-        &on_delta,
-    )
+    tauri::async_runtime::spawn_blocking(move || {
+        llm::stream_chat(
+            &url,
+            &api_key,
+            &model,
+            &system_prompt,
+            &user_content,
+            &on_delta,
+        )
+    })
+    .await
+    .map_err(|error| AppError::Llm(error.to_string()))?
 }
 
 #[tauri::command]

@@ -69,6 +69,10 @@ export const SttEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("loading") }),
   z.object({ type: z.literal("started") }),
   z.object({ type: z.literal("progress"), percent: z.number() }),
+  z.object({
+    type: z.literal("segments"),
+    segments: z.array(TranscriptSegmentSchema),
+  }),
   z.object({ type: z.literal("finished") }),
 ]);
 export type SttEvent = z.infer<typeof SttEventSchema>;
@@ -110,6 +114,20 @@ export const DiarizerPrepareEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("done") }),
 ]);
 export type DiarizerPrepareEvent = z.infer<typeof DiarizerPrepareEventSchema>;
+
+export const DiarizationEventSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("stage"),
+    name: z.string().min(1).max(80),
+  }).strict(),
+  z.object({
+    type: z.literal("progress"),
+    name: z.string().min(1).max(80),
+    completed: z.number().int().min(0).max(4_294_967_295),
+    total: z.number().int().positive().max(4_294_967_295),
+  }).strict().refine((event) => event.completed <= event.total),
+]);
+export type DiarizationEvent = z.infer<typeof DiarizationEventSchema>;
 
 export const PIPELINE_STAGES = [
   "diarizing",
