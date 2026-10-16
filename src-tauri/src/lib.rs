@@ -1,4 +1,5 @@
 mod audio;
+mod credentials;
 mod db;
 mod error;
 mod llm;
@@ -18,6 +19,12 @@ pub struct AppState {
     recording: Mutex<Option<audio::ActiveRecording>>,
     stt: Arc<Mutex<stt::SttState>>,
     data_dir: PathBuf,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum RecordingEvent {
+    Error { message: String },
 }
 
 #[derive(Serialize)]
@@ -45,7 +52,10 @@ fn lock_recording<'a>(
 }
 
 #[tauri::command]
-async fn start_recording(state: State<'_, AppState>) -> Result<RecordingStarted, AppError> {
+async fn start_recording(
+    state: State<'_, AppState>,
+    on_event: Channel<RecordingEvent>,
+) -> Result<RecordingStarted, AppError> {
     {
         let recording = lock_recording(&state)?;
         if recording.is_some() {
@@ -57,7 +67,7 @@ async fn start_recording(state: State<'_, AppState>) -> Result<RecordingStarted,
     let recordings_dir = state.data_dir.join("recordings");
     std::fs::create_dir_all(&recordings_dir)?;
     let active = tauri::async_runtime::spawn_blocking(move || {
-        audio::ActiveRecording::start(&recordings_dir)
+        audio::ActiveRecording::start(&recordings_dir, on_event)
     })
     .await
     .map_err(|error| AppError::Recording(error.to_string()))??;
@@ -259,6 +269,20 @@ async fn stream_llm_chat(
 }
 
 #[tauri::command]
+async fn get_credentials() -> Result<Option<credentials::Credentials>, AppError> {
+    tauri::async_runtime::spawn_blocking(credentials::load)
+        .await
+        .map_err(|error| AppError::CredentialStorage(error.to_string()))?
+}
+
+#[tauri::command]
+async fn save_credentials(credentials: credentials::Credentials) -> Result<(), AppError> {
+    tauri::async_runtime::spawn_blocking(move || credentials::save(&credentials))
+        .await
+        .map_err(|error| AppError::CredentialStorage(error.to_string()))?
+}
+
+#[tauri::command]
 fn write_markdown(
     state: State<'_, AppState>,
     filename: String,
@@ -328,6 +352,8 @@ pub fn run() {
             prepare_diarizer,
             run_diarization,
             stream_llm_chat,
+            get_credentials,
+            save_credentials,
             write_markdown,
             delete_audio,
         ]);

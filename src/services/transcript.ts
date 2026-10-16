@@ -80,8 +80,22 @@ export function buildTranscriptText(
   const filterByProfessor = speakers.length >= 2 && professorSpeaker !== null;
   const visible = filterByProfessor
     ? segments.filter((segment) => {
+        const overlaps = new Map<string, number>();
+        for (const speaker of speakers) {
+          const overlap = Math.max(0,
+            Math.min(segment.endMs, speaker.endMs) - Math.max(segment.startMs, speaker.startMs)
+          );
+          if (overlap > 0) {
+            overlaps.set(speaker.speaker, (overlaps.get(speaker.speaker) ?? 0) + overlap);
+          }
+        }
+        if (overlaps.size > 0) {
+          const professorOverlap = overlaps.get(professorSpeaker) ?? 0;
+          return professorOverlap >= Math.max(...overlaps.values());
+        }
         const midpoint = Math.floor((segment.startMs + segment.endMs) / 2);
-        return speakerAt(speakers, midpoint)?.speaker === professorSpeaker;
+        const nearest = speakerAt(speakers, midpoint);
+        return nearest === null || nearest.speaker === professorSpeaker;
       })
     : segments;
   return visible

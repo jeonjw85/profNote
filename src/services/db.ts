@@ -1,5 +1,6 @@
 import Database from "@tauri-apps/plugin-sql";
 import { z } from "zod";
+import { getCredentials, saveCredentials } from "./credentials";
 import {
   NoteSchema,
   SettingsSchema,
@@ -28,6 +29,14 @@ export async function fetchNotes(): Promise<Note[]> {
     `SELECT ${SELECT_NOTE_COLUMNS} FROM notes ORDER BY created_at DESC`
   );
   return z.array(NoteSchema).parse(rows);
+}
+
+export async function fetchNote(id: string): Promise<Note | null> {
+  const db = await getConnection();
+  const rows = await db.select<unknown[]>(
+    `SELECT ${SELECT_NOTE_COLUMNS} FROM notes WHERE id = $1`, [id]
+  );
+  return rows.length === 0 ? null : NoteSchema.parse(rows[0]);
 }
 
 export async function insertNote(note: Note): Promise<void> {
@@ -62,30 +71,21 @@ export type NotePatch = Partial<
 >;
 
 export async function updateNoteFields(id: string, patch: NotePatch): Promise<void> {
+  const fields = [
+    "title", "transcript", "summary_md", "status", "segments_json", "professor_speaker",
+  ] as const;
+  const entries = fields.flatMap((field) =>
+    patch[field] === undefined ? [] : [[field, patch[field]] as const]
+  );
+  if (entries.length === 0) return;
   const db = await getConnection();
-  const rows = await db.select<unknown[]>(
-    `SELECT ${SELECT_NOTE_COLUMNS} FROM notes WHERE id = $1`,
-    [id]
+  const assignments = entries.map(([field], index) => `${field} = $${index + 1}`);
+  assignments.push(`updated_at = $${entries.length + 1}`);
+  const result = await db.execute(
+    `UPDATE notes SET ${assignments.join(", ")} WHERE id = $${entries.length + 2}`,
+    [...entries.map(([, value]) => value), new Date().toISOString(), id]
   );
-  const existing = NoteSchema.parse(rows[0]);
-  const updated: Note = {
-    ...existing,
-    ...patch,
-    updated_at: new Date().toISOString(),
-  };
-  await db.execute(
-    "UPDATE notes SET title = $1, transcript = $2, summary_md = $3, status = $4, segments_json = $5, professor_speaker = $6, updated_at = $7 WHERE id = $8",
-    [
-      updated.title,
-      updated.transcript,
-      updated.summary_md,
-      updated.status,
-      updated.segments_json,
-      updated.professor_speaker,
-      updated.updated_at,
-      id,
-    ]
-  );
+  if (result.rowsAffected === 0) throw new Error("The note no longer exists.");
 }
 
 export async function deleteNote(id: string): Promise<void> {
@@ -117,13 +117,24 @@ export async function fetchSettings(): Promise<Settings> {
     "SELECT key, value FROM settings"
   );
   const values = new Map(rows.map((row) => [row.key, row.value]));
+  let credentials = await getCredentials();
+  if (credentials === null && (values.get("openai_api_key") || values.get("huggingface_token"))) {
+    credentials = {
+      openaiApiKey: values.get("openai_api_key") ?? "",
+      huggingFaceToken: values.get("huggingface_token") ?? "",
+    };
+    await saveCredentials(credentials);
+  }
+  if (values.has("openai_api_key") || values.has("huggingface_token") || values.has("credential_cleanup_pending")) {
+    await removeLegacyCredentials(db);
+  }
   return SettingsSchema.parse({
-    openaiApiKey: values.get("openai_api_key") ?? "",
+    openaiApiKey: credentials?.openaiApiKey ?? "",
     llmBaseUrl: values.get("llm_base_url") ?? "",
     llmModel: values.get("llm_model") ?? "",
     whisperModel: values.get("whisper_model") ?? "medium",
     whisperLanguage: values.get("whisper_language") ?? "ko",
-    huggingFaceToken: values.get("huggingface_token") ?? "",
+    huggingFaceToken: credentials?.huggingFaceToken ?? "",
     enableDiarization: values.get("enable_diarization") !== "0",
     enableSummary: values.get("enable_summary") !== "0",
     uiLanguage: values.get("ui_language") === "ko" ? "ko" : "en",
@@ -132,14 +143,17 @@ export async function fetchSettings(): Promise<Settings> {
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {
+  await saveCredentials({
+    openaiApiKey: settings.openaiApiKey,
+    huggingFaceToken: settings.huggingFaceToken,
+  });
   const db = await getConnection();
+  await removeLegacyCredentials(db);
   const entries: Array<[string, string]> = [
-    ["openai_api_key", settings.openaiApiKey],
     ["llm_base_url", settings.llmBaseUrl],
     ["llm_model", settings.llmModel],
     ["whisper_model", settings.whisperModel],
     ["whisper_language", settings.whisperLanguage],
-    ["huggingface_token", settings.huggingFaceToken],
     ["enable_diarization", settings.enableDiarization ? "1" : "0"],
     ["enable_summary", settings.enableSummary ? "1" : "0"],
     ["ui_language", settings.uiLanguage],
@@ -151,4 +165,19 @@ export async function saveSettings(settings: Settings): Promise<void> {
       [key, value]
     );
   }
+}
+
+async function removeLegacyCredentials(db: Database): Promise<void> {
+  const pending = await db.select<unknown[]>(
+    "SELECT key FROM settings WHERE key IN ('openai_api_key', 'huggingface_token', 'credential_cleanup_pending') LIMIT 1"
+  );
+  if (pending.length === 0) return;
+  await db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('credential_cleanup_pending', '1')");
+  await db.execute("DELETE FROM settings WHERE key IN ('openai_api_key', 'huggingface_token')");
+  await db.execute("VACUUM");
+  const checkpoints = await db.select<Array<{ busy: number }>>("PRAGMA wal_checkpoint(TRUNCATE)");
+  if (checkpoints.some((checkpoint) => checkpoint.busy !== 0)) {
+    throw new Error("Credential cleanup is busy. Please try again.");
+  }
+  await db.execute("DELETE FROM settings WHERE key = 'credential_cleanup_pending'");
 }

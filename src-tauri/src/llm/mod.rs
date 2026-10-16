@@ -10,6 +10,7 @@ const HEADER_TIMEOUT: Duration = Duration::from_secs(120);
 const TOTAL_TIMEOUT: Duration = Duration::from_secs(1800);
 const ERROR_BODY_LIMIT: u64 = 4096;
 const READ_CHUNK_BYTES: usize = 8 * 1024;
+const SSE_LINE_LIMIT: usize = 1024 * 1024;
 static HTTP_AGENT: LazyLock<ureq::Agent> =
     LazyLock::new(|| build_http_agent(HEADER_TIMEOUT, TOTAL_TIMEOUT));
 
@@ -94,6 +95,7 @@ fn stream_sse_deltas<R: Read>(
 ) -> Result<(), AppError> {
     let mut pending: Vec<u8> = Vec::new();
     let mut chunk = vec![0u8; READ_CHUNK_BYTES];
+    let mut stopped = false;
     loop {
         let read = reader
             .read(&mut chunk)
@@ -103,38 +105,85 @@ fn stream_sse_deltas<R: Read>(
         }
         pending.extend_from_slice(&chunk[..read]);
         while let Some(pos) = pending.iter().position(|byte| *byte == b'\n') {
+            if pos >= SSE_LINE_LIMIT {
+                return Err(AppError::Llm("SSE line exceeds size limit".to_string()));
+            }
             let line: Vec<u8> = pending.drain(..=pos).collect();
-            let line = String::from_utf8_lossy(&line);
-            let line = line.trim();
-            if line
-                .strip_prefix("data:")
-                .is_some_and(|payload| payload.trim() == "[DONE]")
-            {
+            if process_sse_line(&line, &mut on_delta, &mut stopped)? {
                 return Ok(());
             }
-            if let Some(delta) = extract_delta(line) {
-                on_delta(delta);
-            }
+        }
+        if pending.len() > SSE_LINE_LIMIT {
+            return Err(AppError::Llm("SSE line exceeds size limit".to_string()));
         }
     }
-    if let Some(delta) = extract_delta(String::from_utf8_lossy(&pending).trim()) {
-        on_delta(delta);
+    if process_sse_line(&pending, &mut on_delta, &mut stopped)? || stopped {
+        Ok(())
+    } else {
+        Err(AppError::Llm(
+            "stream ended before [DONE] or finish_reason stop".to_string(),
+        ))
     }
-    Ok(())
 }
 
-fn extract_delta(line: &str) -> Option<String> {
-    let payload = line.strip_prefix("data:")?.trim();
+fn process_sse_line(
+    line: &[u8],
+    on_delta: &mut impl FnMut(String),
+    stopped: &mut bool,
+) -> Result<bool, AppError> {
+    let line = std::str::from_utf8(line)
+        .map_err(|error| AppError::Llm(format!("invalid SSE UTF-8: {error}")))?
+        .trim();
+    let Some(payload) = line.strip_prefix("data:").map(str::trim) else {
+        return Ok(false);
+    };
     if payload == "[DONE]" {
-        return None;
+        return Ok(true);
     }
-    let value: serde_json::Value = serde_json::from_str(payload).ok()?;
-    let content = value.pointer("/choices/0/delta/content")?.as_str()?;
-    if content.is_empty() {
-        None
-    } else {
-        Some(content.to_string())
+    let value: serde_json::Value = serde_json::from_str(payload)
+        .map_err(|error| AppError::Llm(format!("invalid SSE JSON: {error}")))?;
+    if let Some(error) = value.get("error").filter(|error| !error.is_null()) {
+        return Err(AppError::Llm(format!("stream error: {error}")));
     }
+    let choices = value
+        .get("choices")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| AppError::Llm("invalid SSE payload: expected choices array".to_string()))?;
+    let Some(choice) = choices.first() else {
+        return Ok(false);
+    };
+    match choice.get("finish_reason") {
+        None | Some(serde_json::Value::Null) => {}
+        Some(serde_json::Value::String(reason)) if reason == "stop" => *stopped = true,
+        Some(serde_json::Value::String(reason)) => {
+            return Err(AppError::Llm(format!(
+                "stream ended with finish_reason {reason}"
+            )));
+        }
+        Some(_) => {
+            return Err(AppError::Llm(
+                "invalid SSE payload: expected string finish_reason".to_string(),
+            ));
+        }
+    }
+    let delta = choice
+        .get("delta")
+        .and_then(serde_json::Value::as_object)
+        .ok_or_else(|| AppError::Llm("invalid SSE payload: expected delta object".to_string()))?;
+    match delta.get("content") {
+        None | Some(serde_json::Value::Null) => {}
+        Some(serde_json::Value::String(content)) => {
+            if !content.is_empty() {
+                on_delta(content.to_string());
+            }
+        }
+        Some(_) => {
+            return Err(AppError::Llm(
+                "invalid SSE payload: expected string content".to_string(),
+            ));
+        }
+    }
+    Ok(false)
 }
 
 #[cfg(test)]
@@ -144,7 +193,7 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
-    use super::{build_http_agent, extract_delta, stream_sse_deltas};
+    use super::{build_http_agent, process_sse_line, stream_sse_deltas};
 
     struct FragmentedReader {
         bytes: Cursor<Vec<u8>>,
@@ -192,25 +241,53 @@ mod tests {
     }
 
     #[test]
-    fn delta_from_data_line() {
+    fn delta_from_data_line() -> Result<(), crate::error::AppError> {
         let line = r#"data: {"choices":[{"delta":{"content":"안녕"}}]}"#;
-        assert_eq!(extract_delta(line), Some("안녕".to_string()));
+        let mut deltas = Vec::new();
+        assert!(!process_sse_line(
+            line.as_bytes(),
+            &mut |delta| deltas.push(delta),
+            &mut false
+        )?);
+        assert_eq!(deltas, vec!["안녕".to_string()]);
+        Ok(())
     }
 
     #[test]
-    fn done_marker_yields_none() {
-        assert_eq!(extract_delta("data: [DONE]"), None);
+    fn done_marker_yields_none() -> Result<(), crate::error::AppError> {
+        let mut deltas = Vec::new();
+        assert!(process_sse_line(
+            b"data: [DONE]",
+            &mut |delta| deltas.push(delta),
+            &mut false
+        )?);
+        assert!(deltas.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn non_data_line_yields_none() {
-        assert_eq!(extract_delta(": keep-alive"), None);
+    fn non_data_line_yields_none() -> Result<(), crate::error::AppError> {
+        let mut deltas = Vec::new();
+        assert!(!process_sse_line(
+            b": keep-alive",
+            &mut |delta| deltas.push(delta),
+            &mut false
+        )?);
+        assert!(deltas.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn role_only_chunk_yields_none() {
+    fn role_only_chunk_yields_none() -> Result<(), crate::error::AppError> {
         let line = r#"data: {"choices":[{"delta":{"role":"assistant"}}]}"#;
-        assert_eq!(extract_delta(line), None);
+        let mut deltas = Vec::new();
+        assert!(!process_sse_line(
+            line.as_bytes(),
+            &mut |delta| deltas.push(delta),
+            &mut false
+        )?);
+        assert!(deltas.is_empty());
+        Ok(())
     }
 
     #[test]
@@ -250,11 +327,149 @@ mod tests {
 
     #[test]
     fn final_delta_without_newline_is_preserved() -> Result<(), crate::error::AppError> {
-        let reader = Cursor::new(br#"data: {"choices":[{"delta":{"content":"last"}}]}"#);
+        let reader = Cursor::new(
+            br#"data: {"choices":[{"delta":{"content":"last"},"finish_reason":"stop"}]}"#,
+        );
         let mut deltas = Vec::new();
         stream_sse_deltas(reader, |delta| deltas.push(delta))?;
         assert_eq!(deltas, vec!["last".to_string()]);
         Ok(())
+    }
+
+    #[test]
+    fn premature_eof_is_rejected() {
+        for stream in [
+            "",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}",
+        ] {
+            let result = stream_sse_deltas(Cursor::new(stream), |_| {});
+            assert!(matches!(result, Err(crate::error::AppError::Llm(_))));
+        }
+    }
+
+    #[test]
+    fn final_done_marker_without_newline_preserves_deltas() -> Result<(), crate::error::AppError> {
+        let reader = FragmentedReader {
+            bytes: Cursor::new(
+                b"data: {\"choices\":[{\"delta\":{\"content\":\"last\"}}]}\n\ndata: [DONE]"
+                    .to_vec(),
+            ),
+            fragment_size: 1,
+            fail_at_end: false,
+        };
+        let mut deltas = Vec::new();
+        stream_sse_deltas(reader, |delta| deltas.push(delta))?;
+        assert_eq!(deltas, vec!["last".to_string()]);
+        Ok(())
+    }
+
+    #[test]
+    fn streaming_api_errors_preserve_server_details() {
+        for payload in [
+            r#"{"error":{"message":"quota exhausted","code":"insufficient_quota"}}"#,
+            r#"{"error":"quota exhausted"}"#,
+        ] {
+            let stream = format!(
+                "data: {{\"choices\":[{{\"delta\":{{\"content\":\"partial\"}}}}]}}\n\nevent: error\ndata: {payload}\n\ndata: [DONE]\n\n"
+            );
+            let mut deltas = Vec::new();
+            let result = stream_sse_deltas(Cursor::new(stream), |delta| deltas.push(delta));
+            assert!(
+                matches!(result, Err(crate::error::AppError::Llm(ref detail)) if detail.contains("quota exhausted"))
+            );
+            assert_eq!(deltas, vec!["partial".to_string()]);
+        }
+    }
+
+    #[test]
+    fn malformed_stream_data_is_rejected_even_before_done() {
+        for payload in [
+            "{",
+            "not json",
+            "null",
+            "{}",
+            r#"{"choices":"invalid"}"#,
+            r#"{"choices":[{"delta":{"content":42}}]}"#,
+            r#"{"choices":[{"delta":{},"finish_reason":42}]}"#,
+        ] {
+            let stream = format!("data: {payload}\n\ndata: [DONE]\n\n");
+            let result = stream_sse_deltas(Cursor::new(stream), |_| {});
+            assert!(
+                matches!(result, Err(crate::error::AppError::Llm(_))),
+                "accepted malformed payload: {payload}"
+            );
+        }
+    }
+
+    #[test]
+    fn malformed_final_data_without_newline_is_rejected() {
+        let stream = concat!(
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
+            "data: {"
+        );
+        let result = stream_sse_deltas(Cursor::new(stream), |_| {});
+        assert!(matches!(result, Err(crate::error::AppError::Llm(_))));
+    }
+
+    #[test]
+    fn unsuccessful_finish_reasons_are_rejected_before_emitting_content() {
+        for reason in ["length", "content_filter", "tool_calls"] {
+            let stream = format!(
+                "data: {{\"choices\":[{{\"delta\":{{\"content\":\"partial\"}},\"finish_reason\":\"{reason}\"}}]}}\n\ndata: [DONE]\n\n"
+            );
+            let mut deltas = Vec::new();
+            let result = stream_sse_deltas(Cursor::new(stream), |delta| deltas.push(delta));
+            assert!(
+                matches!(result, Err(crate::error::AppError::Llm(ref detail)) if detail.contains(reason))
+            );
+            assert!(deltas.is_empty());
+        }
+    }
+
+    #[test]
+    fn stop_allows_usage_events_before_eof() -> Result<(), crate::error::AppError> {
+        let stream = concat!(
+            ": keep-alive\n\n",
+            "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":null}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"last\"},\"finish_reason\":\"stop\"}]}\n\n",
+            "data: {\"choices\":[],\"usage\":{\"completion_tokens\":1}}\n\n"
+        );
+        let mut deltas = Vec::new();
+        stream_sse_deltas(Cursor::new(stream), |delta| deltas.push(delta))?;
+        assert_eq!(deltas, vec!["last".to_string()]);
+        Ok(())
+    }
+
+    #[test]
+    fn errors_after_stop_are_not_ignored() {
+        let stream = concat!(
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
+            "data: {\"error\":{\"message\":\"upstream failed\"}}\n\n",
+            "data: [DONE]\n\n"
+        );
+        let result = stream_sse_deltas(Cursor::new(stream), |_| {});
+        assert!(
+            matches!(result, Err(crate::error::AppError::Llm(ref detail)) if detail.contains("upstream failed"))
+        );
+    }
+
+    #[test]
+    fn invalid_utf8_stream_data_is_rejected() {
+        let stream =
+            b"data: {\"choices\":[{\"delta\":{\"content\":\"\xff\"}}]}\n\ndata: [DONE]\n\n";
+        let result = stream_sse_deltas(Cursor::new(stream), |_| {});
+        assert!(matches!(result, Err(crate::error::AppError::Llm(_))));
+    }
+
+    #[test]
+    fn oversized_sse_lines_are_rejected() {
+        let stream = format!(
+            "data: {{\"choices\":[{{\"delta\":{{\"content\":\"{}\"}}}}]}}\n\ndata: [DONE]\n\n",
+            "x".repeat(1024 * 1024)
+        );
+        let result = stream_sse_deltas(Cursor::new(stream), |_| {});
+        assert!(matches!(result, Err(crate::error::AppError::Llm(_))));
     }
 
     #[test]

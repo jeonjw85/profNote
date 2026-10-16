@@ -7,6 +7,7 @@ import {
   DownloadEventSchema,
   FfmpegStatusSchema,
   ModelStatusSchema,
+  RecordingEventSchema,
   RecordingStartedSchema,
   RecordingStoppedSchema,
   SpeakerSegmentSchema,
@@ -18,6 +19,7 @@ import {
   type DownloadEvent,
   type FfmpegStatus,
   type ModelStatus,
+  type RecordingEvent,
   type RecordingStarted,
   type RecordingStopped,
   type SpeakerSegment,
@@ -26,8 +28,32 @@ import {
 } from "../types";
 import { toMessage } from "./errors";
 
-export async function startRecording(): Promise<RecordingStarted> {
-  return RecordingStartedSchema.parse(await invoke("start_recording"));
+export async function startRecording(
+  onEvent: (event: RecordingEvent) => void,
+): Promise<RecordingStarted> {
+  let receivedError = false;
+  const channel = new Channel<unknown>();
+  channel.onmessage = (message) => {
+    if (receivedError) {
+      return;
+    }
+    receivedError = true;
+    const event = RecordingEventSchema.safeParse(message);
+    try {
+      onEvent(event.success ? event.data : {
+        type: "error",
+        message: `Invalid recording event: ${toMessage(event.error)}`,
+      });
+    } catch (caught) {
+      console.error("Recording error handler failed", toMessage(caught));
+    }
+  };
+  try {
+    return RecordingStartedSchema.parse(await invoke("start_recording", { onEvent: channel }));
+  } catch (caught) {
+    receivedError = true;
+    throw Object.assign(new Error(toMessage(caught)), { cause: caught });
+  }
 }
 
 export async function stopRecording(): Promise<RecordingStopped> {

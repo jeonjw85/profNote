@@ -29,6 +29,8 @@ jobs:
 
       - run: npm run typecheck
 
+      - run: node --test tests/*.test.mjs
+
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets
 
       - run: cargo test --manifest-path src-tauri/Cargo.toml
