@@ -141,7 +141,6 @@ export function Editor({
     const [confirmingDelete, setConfirmingDelete] = useState(false);
     const [professor, setProfessor] = useState(note.professor_speaker);
     const [syncedId, setSyncedId] = useState(note.id);
-    const [syncedAt, setSyncedAt] = useState(note.updated_at);
     const [syncedValues, setSyncedValues] = useState({
         title: note.title,
         summary: note.summary_md,
@@ -158,7 +157,6 @@ export function Editor({
 
     if (syncedId !== note.id) {
         setSyncedId(note.id);
-        setSyncedAt(note.updated_at);
         setSyncedValues({
             title: note.title,
             summary: note.summary_md,
@@ -176,9 +174,12 @@ export function Editor({
         setCurrentTime(0);
         setDuration(0);
         setAudioFailed(false);
-    }
-    if (syncedAt !== note.updated_at) {
-        setSyncedAt(note.updated_at);
+    } else if (
+        syncedValues.title !== note.title ||
+        syncedValues.summary !== note.summary_md ||
+        syncedValues.transcript !== note.transcript ||
+        syncedValues.professor !== note.professor_speaker
+    ) {
         if (title === syncedValues.title) setTitle(note.title);
         if (summary === syncedValues.summary) setSummary(note.summary_md);
         if (transcript === syncedValues.transcript) {

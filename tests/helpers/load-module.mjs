@@ -14,7 +14,8 @@ export function createLoader(stubs = {}) {
     const module = { exports: {} };
     cache.set(filename, module);
     const code = ts.transpileModule(readFileSync(filename, "utf8"), {
-      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+      fileName: filename,
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
     }).outputText;
     const localRequire = (name) => {
       if (Object.hasOwn(stubs, name)) return stubs[name];
