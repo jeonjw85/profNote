@@ -21,6 +21,12 @@ pub struct AppState {
 }
 
 #[derive(Serialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum RecordingEvent {
+    Error { message: String },
+}
+
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RecordingStarted {
     started_at_ms: u64,
@@ -45,7 +51,10 @@ fn lock_recording<'a>(
 }
 
 #[tauri::command]
-async fn start_recording(state: State<'_, AppState>) -> Result<RecordingStarted, AppError> {
+async fn start_recording(
+    state: State<'_, AppState>,
+    on_event: Channel<RecordingEvent>,
+) -> Result<RecordingStarted, AppError> {
     {
         let recording = lock_recording(&state)?;
         if recording.is_some() {
@@ -57,7 +66,7 @@ async fn start_recording(state: State<'_, AppState>) -> Result<RecordingStarted,
     let recordings_dir = state.data_dir.join("recordings");
     std::fs::create_dir_all(&recordings_dir)?;
     let active = tauri::async_runtime::spawn_blocking(move || {
-        audio::ActiveRecording::start(&recordings_dir)
+        audio::ActiveRecording::start(&recordings_dir, on_event)
     })
     .await
     .map_err(|error| AppError::Recording(error.to_string()))??;

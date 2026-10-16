@@ -32,6 +32,12 @@ export const RecordingStartedSchema = z.object({
 });
 export type RecordingStarted = z.infer<typeof RecordingStartedSchema>;
 
+export const RecordingEventSchema = z.object({
+  type: z.literal("error"),
+  message: z.string().min(1),
+}).strict();
+export type RecordingEvent = z.infer<typeof RecordingEventSchema>;
+
 export const RecordingStoppedSchema = z.object({
   wavPath: z.string(),
   durationMs: z.number(),
