@@ -3202,7 +3202,7 @@ dependencies = [
 
 [[package]]
 name = "profnote"
-version = "0.3.13"
+version = "0.3.14"
 dependencies = [
  "block2",
  "cpal",
