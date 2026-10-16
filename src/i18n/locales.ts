@@ -2,6 +2,7 @@ export const ko: Record<string, string> = {
   "app.drop": "오디오 파일을 놓아서 가져오기",
   "app.empty": "강의를 녹음하면 전사와 요약이 자동으로 여기에 표시됩니다",
   "app.loading": "불러오는 중",
+  "app.retry": "재시도",
   "app.settings": "설정",
   "app.unsupportedAudio": "지원하지 않는 오디오 형식입니다",
   "diarizer.engine": "화자 분리 엔진 설치 중",
@@ -191,6 +192,7 @@ export const en: Record<string, string> = {
   "app.empty":
     "Record a lecture and the transcript and summary will appear here",
   "app.loading": "Loading",
+  "app.retry": "Retry",
   "app.settings": "Settings",
   "app.unsupportedAudio": "Unsupported audio format",
   "diarizer.engine": "Installing diarization engine",

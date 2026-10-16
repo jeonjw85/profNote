@@ -92,10 +92,18 @@
 .loading {
     height: 100%;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 12px;
+    padding: 24px;
     color: var(--color-text-muted);
     font-size: 13.5px;
+    text-align: center;
+}
+
+.loading p {
+    margin: 0;
 }
 
 .dropOverlay {

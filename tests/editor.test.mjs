@@ -9,7 +9,7 @@ const note = {
   updated_at: "2026-10-16T00:00:00.000Z", segments_json: "", professor_speaker: null,
 };
 
-function mountEditor(t, initial = note) {
+function mountEditor(t, initial = note, { save = async () => {}, refresh = true } = {}) {
   const harness = createHookHarness();
   t.after(() => harness.cleanup());
   const load = createLoader({
@@ -23,12 +23,22 @@ function mountEditor(t, initial = note) {
   const { Editor } = load("src/components/Editor.tsx");
   const ref = { current: null };
   const patches = [];
+  let persisted = initial;
   const props = {
-    ref, note: initial, onPatch: async patch => { patches.push(patch); },
+    ref, note: initial, onPatch: async patch => {
+      patches.push({ ...patch });
+      await save(patch);
+      persisted = { ...persisted, ...patch };
+      if (refresh) {
+        props.note = persisted;
+        render();
+      }
+    },
     onDelete() {}, onRegenerateSummary() {}, regenerating: false, pipelineActive: false,
     processingHint: null, liveTranscript: null, liveSummary: null,
   };
-  return { props, patches, ref, render: () => harness.render(() => Editor(props)) };
+  const render = () => harness.render(() => Editor(props));
+  return { props, patches, ref, render, get persisted() { return persisted; } };
 }
 
 function find(element, predicate) {
@@ -75,4 +85,145 @@ test("genuine local summary edits are preserved across background updates", asyn
   editor.render();
   await editor.ref.current.flush();
   assert.deepEqual(editor.patches, [{ summary_md: "My edited summary" }]);
+});
+
+function deferred() {
+  let resolve;
+  const promise = new Promise(yes => { resolve = yes; });
+  return { promise, resolve };
+}
+
+function editField(editor, field, value) {
+  let tree = editor.render();
+  if (field !== "title") {
+    find(tree, element => element.type === "button" && element.props?.children === `editor.tab.${field === "summary_md" ? "summary" : "transcript"}`)
+      .props.onClick();
+    tree = editor.render();
+    const edit = find(tree, element => element.type === "button" && element.props?.children === "editor.edit");
+    if (edit) {
+      edit.props.onClick();
+      tree = editor.render();
+    }
+  }
+  const input = find(tree, element => field === "title"
+    ? element.props?.["aria-label"] === "editor.aria.title"
+    : element.type === "textarea");
+  input.props.onChange({ target: { value } });
+  editor.render();
+}
+
+for (const field of ["title", "summary_md", "transcript"]) {
+  test(`${field} reverted during autosave is not overwritten by the older save`, async (t) => {
+    const gate = deferred();
+    const started = deferred();
+    let writes = 0;
+    const editor = mountEditor(t, { ...note, [field]: "A" }, { save: async () => {
+      if (++writes === 1) {
+        started.resolve();
+        await gate.promise;
+      }
+    } });
+    t.after(() => gate.resolve());
+    editField(editor, field, "B");
+    await started.promise;
+    editField(editor, field, "A");
+    gate.resolve();
+    await new Promise(setImmediate);
+    const input = find(editor.render(), element => field === "title"
+      ? element.props?.["aria-label"] === "editor.aria.title"
+      : element.type === "textarea");
+    assert.equal(input.props.value, "A");
+    await editor.ref.current.flush();
+    assert.equal(editor.persisted[field], "A");
+    assert.deepEqual(editor.patches, [{ [field]: "B" }, { [field]: "A" }]);
+  });
+}
+
+test("flush saves input typed while its first save is in flight", async (t) => {
+  const gate = deferred();
+  const started = deferred();
+  let writes = 0;
+  const editor = mountEditor(t, note, { save: async () => {
+    if (++writes === 1) {
+      started.resolve();
+      await gate.promise;
+    }
+  } });
+  t.after(() => gate.resolve());
+  editField(editor, "title", "B");
+  const flushing = editor.ref.current.flush();
+  await started.promise;
+  editField(editor, "title", "C");
+  gate.resolve();
+  await flushing;
+  assert.equal(editor.persisted.title, "C");
+  assert.deepEqual(editor.patches, [{ title: "B" }, { title: "C" }]);
+});
+
+test("a waiting flush reads the latest input instead of its earlier render", async (t) => {
+  const gate = deferred();
+  const started = deferred();
+  let writes = 0;
+  const editor = mountEditor(t, note, { save: async () => {
+    if (++writes === 1) {
+      started.resolve();
+      await gate.promise;
+    }
+  } });
+  t.after(() => gate.resolve());
+  editField(editor, "title", "B");
+  const first = editor.ref.current.flush();
+  await started.promise;
+  editField(editor, "title", "C");
+  const waiting = editor.ref.current.flush();
+  editField(editor, "title", "D");
+  gate.resolve();
+  await Promise.all([first, waiting]);
+  assert.equal(editor.persisted.title, "D");
+  assert.equal(editor.patches.some(patch => patch.title === "C"), false);
+});
+
+test("flush preserves a revert even before refreshed props arrive", async (t) => {
+  const gate = deferred();
+  const started = deferred();
+  let writes = 0;
+  const editor = mountEditor(t, { ...note, title: "A" }, { refresh: false, save: async () => {
+    if (++writes === 1) {
+      started.resolve();
+      await gate.promise;
+    }
+  } });
+  t.after(() => gate.resolve());
+  editField(editor, "title", "B");
+  const flushing = editor.ref.current.flush();
+  await started.promise;
+  editField(editor, "title", "A");
+  gate.resolve();
+  await flushing;
+  assert.equal(editor.persisted.title, "A");
+  assert.deepEqual(editor.patches, [{ title: "B" }, { title: "A" }]);
+});
+
+test("an unrelated background update cannot reset a successful title save", async (t) => {
+  const gate = deferred();
+  const started = deferred();
+  let writes = 0;
+  const editor = mountEditor(t, { ...note, title: "A" }, { refresh: false, save: async () => {
+    if (++writes === 1) {
+      started.resolve();
+      await gate.promise;
+    }
+  } });
+  t.after(() => gate.resolve());
+  editField(editor, "title", "B");
+  await started.promise;
+  editField(editor, "title", "A");
+  gate.resolve();
+  await new Promise(setImmediate);
+  assert.equal(editor.persisted.title, "B");
+  editor.props.note = { ...editor.props.note, summary_md: "Generated summary" };
+  editor.render();
+  await editor.ref.current.flush();
+  assert.equal(editor.persisted.title, "A");
+  assert.deepEqual(editor.patches, [{ title: "B" }, { title: "A" }]);
 });
