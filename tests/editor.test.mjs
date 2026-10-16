@@ -203,3 +203,27 @@ test("flush preserves a revert even before refreshed props arrive", async (t) =>
   assert.equal(editor.persisted.title, "A");
   assert.deepEqual(editor.patches, [{ title: "B" }, { title: "A" }]);
 });
+
+test("an unrelated background update cannot reset a successful title save", async (t) => {
+  const gate = deferred();
+  const started = deferred();
+  let writes = 0;
+  const editor = mountEditor(t, { ...note, title: "A" }, { refresh: false, save: async () => {
+    if (++writes === 1) {
+      started.resolve();
+      await gate.promise;
+    }
+  } });
+  t.after(() => gate.resolve());
+  editField(editor, "title", "B");
+  await started.promise;
+  editField(editor, "title", "A");
+  gate.resolve();
+  await new Promise(setImmediate);
+  assert.equal(editor.persisted.title, "B");
+  editor.props.note = { ...editor.props.note, summary_md: "Generated summary" };
+  editor.render();
+  await editor.ref.current.flush();
+  assert.equal(editor.persisted.title, "A");
+  assert.deepEqual(editor.patches, [{ title: "B" }, { title: "A" }]);
+});

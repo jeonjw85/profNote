@@ -176,6 +176,7 @@ export function Editor({
         transcript: note.transcript,
         professor_speaker: note.professor_speaker,
     });
+    const observedNoteRef = useRef(note);
     const latestSaveRef = useRef<{
         buildPatch: () => NotePatch;
         persistPatch: (patch: NotePatch) => Promise<void>;
@@ -242,14 +243,18 @@ export function Editor({
     const seekable = Number.isFinite(duration) && duration > 0;
 
     useEffect(() => {
-        savedValuesRef.current = {
-            id: note.id,
-            title: note.title,
-            summary_md: note.summary_md,
-            transcript: note.transcript,
-            professor_speaker: note.professor_speaker,
-        };
-    }, [note.id, note.title, note.summary_md, note.transcript, note.professor_speaker]);
+        const previous = observedNoteRef.current;
+        if (previous.id !== note.id) {
+            savedValuesRef.current = note;
+        } else {
+            for (const field of EDITABLE_FIELDS) {
+                if (previous[field] !== note[field]) {
+                    savedValuesRef.current = { ...savedValuesRef.current, [field]: note[field] };
+                }
+            }
+        }
+        observedNoteRef.current = note;
+    }, [note]);
 
     useEffect(() => {
         if (!confirmingDelete) {
