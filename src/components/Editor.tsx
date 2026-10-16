@@ -78,6 +78,16 @@ function parseTranscriptBlocks(transcript: string): TranscriptBlock[] {
 const EDIT_DEBOUNCE_MS = 400;
 const DELETE_CONFIRM_RESET_MS = 3000;
 
+const EDITABLE_FIELDS = ["title", "summary_md", "transcript", "professor_speaker"] as const;
+type EditableField = typeof EDITABLE_FIELDS[number];
+type EditRevisions = Record<EditableField, number>;
+const INITIAL_REVISIONS: EditRevisions = {
+    title: 0,
+    summary_md: 0,
+    transcript: 0,
+    professor_speaker: 0,
+};
+
 type EditorTab = "transcript" | "summary";
 
 function parseSpeakerData(raw: string): SpeakerData | null {
@@ -147,6 +157,11 @@ export function Editor({
         transcript: note.transcript,
         professor: note.professor_speaker,
     });
+    const [editRevisions, setEditRevisions] = useState(INITIAL_REVISIONS);
+    const [savedEdits, setSavedEdits] = useState({
+        noteId: note.id,
+        revisions: INITIAL_REVISIONS,
+    });
     const [playing, setPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
@@ -154,9 +169,22 @@ export function Editor({
     const audioRef = useRef<HTMLAudioElement>(null);
     const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pendingSaveRef = useRef<Promise<void> | null>(null);
+    const savedValuesRef = useRef({
+        id: note.id,
+        title: note.title,
+        summary_md: note.summary_md,
+        transcript: note.transcript,
+        professor_speaker: note.professor_speaker,
+    });
+    const latestSaveRef = useRef<{
+        buildPatch: () => NotePatch;
+        persistPatch: (patch: NotePatch) => Promise<void>;
+    } | null>(null);
 
     if (syncedId !== note.id) {
         setSyncedId(note.id);
+        setEditRevisions(INITIAL_REVISIONS);
+        setSavedEdits({ noteId: note.id, revisions: INITIAL_REVISIONS });
         setSyncedValues({
             title: note.title,
             summary: note.summary_md,
@@ -180,12 +208,12 @@ export function Editor({
         syncedValues.transcript !== note.transcript ||
         syncedValues.professor !== note.professor_speaker
     ) {
-        if (title === syncedValues.title) setTitle(note.title);
-        if (summary === syncedValues.summary) setSummary(note.summary_md);
-        if (transcript === syncedValues.transcript) {
+        if (editRevisions.title === savedEdits.revisions.title) setTitle(note.title);
+        if (editRevisions.summary_md === savedEdits.revisions.summary_md) setSummary(note.summary_md);
+        if (editRevisions.transcript === savedEdits.revisions.transcript) {
             setTranscript(note.transcript);
         }
-        if (professor === syncedValues.professor) {
+        if (editRevisions.professor_speaker === savedEdits.revisions.professor_speaker) {
             setProfessor(note.professor_speaker);
         }
         setSyncedValues({
@@ -214,6 +242,16 @@ export function Editor({
     const seekable = Number.isFinite(duration) && duration > 0;
 
     useEffect(() => {
+        savedValuesRef.current = {
+            id: note.id,
+            title: note.title,
+            summary_md: note.summary_md,
+            transcript: note.transcript,
+            professor_speaker: note.professor_speaker,
+        };
+    }, [note.id, note.title, note.summary_md, note.transcript, note.professor_speaker]);
+
+    useEffect(() => {
         if (!confirmingDelete) {
             return;
         }
@@ -225,42 +263,64 @@ export function Editor({
     }, [confirmingDelete]);
 
     const buildPatch = useCallback((): NotePatch => {
+        const saved = savedValuesRef.current;
+        if (saved.id !== note.id) return {};
         const patch: NotePatch = {};
-        if (title !== note.title) patch.title = title;
-        if (summary !== note.summary_md) patch.summary_md = summary;
-        if (transcript !== note.transcript) patch.transcript = transcript;
+        if (title !== saved.title) patch.title = title;
+        if (summary !== saved.summary_md) patch.summary_md = summary;
+        if (transcript !== saved.transcript) patch.transcript = transcript;
+        if (professor !== saved.professor_speaker) patch.professor_speaker = professor;
         return patch;
-    }, [
-        title,
-        summary,
-        transcript,
-        note.title,
-        note.summary_md,
-        note.transcript,
-    ]);
+    }, [title, summary, transcript, professor, note]);
 
-    const persistPatch = useCallback((patch: NotePatch): Promise<void> => {
+    const persistPatch = useCallback((patch: NotePatch, revisions = editRevisions): Promise<void> => {
         const pending = pendingSaveRef.current;
         const save = (pending ?? Promise.resolve())
             .catch(() => undefined)
-            .then(() => onPatch(patch));
+            .then(async () => {
+                await onPatch(patch);
+                if (savedValuesRef.current.id !== note.id) return;
+                savedValuesRef.current = { ...savedValuesRef.current, ...patch };
+                setSavedEdits((current) => {
+                    if (current.noteId !== note.id) return current;
+                    const acknowledged = { ...current.revisions };
+                    for (const field of EDITABLE_FIELDS) {
+                        if (patch[field] !== undefined) {
+                            acknowledged[field] = Math.max(acknowledged[field], revisions[field]);
+                        }
+                    }
+                    return { noteId: note.id, revisions: acknowledged };
+                });
+            });
         pendingSaveRef.current = save;
         const clearPending = () => {
             if (pendingSaveRef.current === save) pendingSaveRef.current = null;
         };
         void save.then(clearPending, clearPending);
         return save;
-    }, [onPatch]);
+    }, [onPatch, editRevisions, note.id]);
+
+    useEffect(() => {
+        latestSaveRef.current = { buildPatch, persistPatch };
+    }, [buildPatch, persistPatch]);
 
     const flush = useCallback(async () => {
-        if (autosaveTimerRef.current !== null) {
-            clearTimeout(autosaveTimerRef.current);
-            autosaveTimerRef.current = null;
+        for (;;) {
+            if (autosaveTimerRef.current !== null) {
+                clearTimeout(autosaveTimerRef.current);
+                autosaveTimerRef.current = null;
+            }
+            if (pendingSaveRef.current !== null) {
+                await pendingSaveRef.current;
+                continue;
+            }
+            const latest = latestSaveRef.current;
+            if (latest === null) return;
+            const patch = latest.buildPatch();
+            if (Object.keys(patch).length === 0) return;
+            await latest.persistPatch(patch);
         }
-        await pendingSaveRef.current;
-        const patch = buildPatch();
-        if (Object.keys(patch).length > 0) await persistPatch(patch);
-    }, [buildPatch, persistPatch]);
+    }, []);
 
     useImperativeHandle(ref, () => ({ flush }), [flush]);
 
@@ -339,11 +399,22 @@ export function Editor({
         );
         setTranscript(rebuilt);
         setSummary("");
+        const revisions = {
+            ...editRevisions,
+            transcript: editRevisions.transcript + 1,
+            summary_md: editRevisions.summary_md + 1,
+            professor_speaker: editRevisions.professor_speaker + 1,
+        };
+        setEditRevisions(revisions);
         void persistPatch({
             transcript: rebuilt,
             professor_speaker: speaker,
             summary_md: "",
-        }).catch(() => undefined);
+        }, revisions).catch(() => undefined);
+    };
+
+    const markEdited = (field: EditableField) => {
+        setEditRevisions((current) => ({ ...current, [field]: current[field] + 1 }));
     };
 
     return (
@@ -353,7 +424,10 @@ export function Editor({
                     className={styles.titleInput}
                     value={title}
                     readOnly={editingDisabled}
-                    onChange={(event) => setTitle(event.target.value)}
+                    onChange={(event) => {
+                        setTitle(event.target.value);
+                        markEdited("title");
+                    }}
                     placeholder={t("editor.title.placeholder")}
                     aria-label={t("editor.aria.title")}
                 />
@@ -500,11 +574,15 @@ export function Editor({
                         className={styles.textarea}
                         value={tab === "summary" ? liveSummary ?? summary : liveTranscript ?? transcript}
                         readOnly={editingDisabled || (tab === "summary" ? liveSummary !== null : liveTranscript !== null)}
-                        onChange={(event) =>
-                            tab === "summary"
-                                ? setSummary(event.target.value)
-                                : setTranscript(event.target.value)
-                        }
+                        onChange={(event) => {
+                            if (tab === "summary") {
+                                setSummary(event.target.value);
+                                markEdited("summary_md");
+                            } else {
+                                setTranscript(event.target.value);
+                                markEdited("transcript");
+                            }
+                        }}
                         placeholder={
                             processingHint ??
                             bodyPlaceholder(
