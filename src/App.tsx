@@ -1,5 +1,5 @@
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./App.module.css";
 import { Editor, type EditorHandle } from "./components/Editor";
 import { NoteList } from "./components/NoteList";
@@ -22,6 +22,7 @@ import {
 } from "./services/audio";
 import { fetchSettings, saveSettings } from "./services/db";
 import { toMessage } from "./services/errors";
+import { createNoteSelector } from "./services/selection";
 import type { Settings } from "./types";
 
 const DEFAULT_SETTINGS: Settings = {
@@ -90,6 +91,7 @@ function AppBody({
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [settingsSection, setSettingsSection] = useState<"preferences" | "downloads">("preferences");
     const [appError, setAppError] = useState<string | null>(null);
+    const [selectingNote, setSelectingNote] = useState(false);
     const [dropActive, setDropActive] = useState(false);
     const editorRef = useRef<EditorHandle | null>(null);
     const flushEditor = useCallback(async () => {
@@ -100,10 +102,18 @@ function AppBody({
         }
     }, []);
 
+    const selectAfterSave = useMemo(() => createNoteSelector(), []);
+    const selectNote = useCallback((id: string) => selectAfterSave(id, {
+        flush: flushEditor,
+        select: setSelectedId,
+        reportError: (caught) => setAppError(toMessage(caught)),
+        setBusy: setSelectingNote,
+    }), [flushEditor, selectAfterSave, setSelectedId]);
+
     const pipeline = usePipeline({
         settings: settings ?? DEFAULT_SETTINGS,
         onNotesChanged: refresh,
-        onNoteCreated: setSelectedId,
+        onNoteCreated: selectNote,
     });
     const recorder = useRecorder(pipeline.run);
     const activityBusy = recorder.status !== "idle" || pipeline.pipeline !== null;
@@ -306,7 +316,7 @@ function AppBody({
                 <NoteList
                     notes={notes}
                     selectedId={selectedId}
-                    onSelect={setSelectedId}
+                    onSelect={selectNote}
                 />
                 {updateNotice !== null && (
                     <button
@@ -344,7 +354,7 @@ function AppBody({
                     <Editor
                         ref={editorRef}
                         note={selectedNote}
-                        editingDisabled={updater.state.status === "installing" || updater.state.status === "restarting"}
+                        editingDisabled={selectingNote || updater.state.status === "installing" || updater.state.status === "restarting"}
                         liveTranscript={
                             pipeline.preview?.noteId === selectedNote.id
                                 ? pipeline.preview.transcript
