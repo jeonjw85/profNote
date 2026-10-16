@@ -1,4 +1,5 @@
 mod audio;
+mod credentials;
 mod db;
 mod error;
 mod llm;
@@ -268,6 +269,20 @@ async fn stream_llm_chat(
 }
 
 #[tauri::command]
+async fn get_credentials() -> Result<Option<credentials::Credentials>, AppError> {
+    tauri::async_runtime::spawn_blocking(credentials::load)
+        .await
+        .map_err(|error| AppError::CredentialStorage(error.to_string()))?
+}
+
+#[tauri::command]
+async fn save_credentials(credentials: credentials::Credentials) -> Result<(), AppError> {
+    tauri::async_runtime::spawn_blocking(move || credentials::save(&credentials))
+        .await
+        .map_err(|error| AppError::CredentialStorage(error.to_string()))?
+}
+
+#[tauri::command]
 fn write_markdown(
     state: State<'_, AppState>,
     filename: String,
@@ -337,6 +352,8 @@ pub fn run() {
             prepare_diarizer,
             run_diarization,
             stream_llm_chat,
+            get_credentials,
+            save_credentials,
             write_markdown,
             delete_audio,
         ]);

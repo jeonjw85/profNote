@@ -11,7 +11,10 @@ const note = {
 
 function setup(t) {
   const database = createDatabase(t);
-  const load = createLoader({ "@tauri-apps/plugin-sql": { default: { load: async () => database } } });
+  const load = createLoader({
+    "@tauri-apps/plugin-sql": { default: { load: async () => database } },
+    "./credentials": {},
+  });
   return { database, ...load("src/services/db.ts") };
 }
 

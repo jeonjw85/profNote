@@ -22,6 +22,8 @@ pub enum AppError {
     Download(String),
     #[error("llm request failed: {0}")]
     Llm(String),
+    #[error("credential storage failed: {0}")]
+    CredentialStorage(String),
     #[error("invalid input: {0}")]
     InvalidInput(String),
 }

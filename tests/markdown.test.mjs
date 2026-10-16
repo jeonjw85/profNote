@@ -25,6 +25,7 @@ function setup(t, write) {
   const load = createLoader({
     "@tauri-apps/plugin-sql": { default: { load: async () => database } },
     "./audio": { writeMarkdown },
+    "./credentials": {},
   });
   return {
     ...load("src/services/db.ts"), ...load("src/services/markdown.ts"),

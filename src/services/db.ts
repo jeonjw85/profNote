@@ -1,5 +1,6 @@
 import Database from "@tauri-apps/plugin-sql";
 import { z } from "zod";
+import { getCredentials, saveCredentials } from "./credentials";
 import {
   NoteSchema,
   SettingsSchema,
@@ -116,13 +117,24 @@ export async function fetchSettings(): Promise<Settings> {
     "SELECT key, value FROM settings"
   );
   const values = new Map(rows.map((row) => [row.key, row.value]));
+  let credentials = await getCredentials();
+  if (credentials === null && (values.get("openai_api_key") || values.get("huggingface_token"))) {
+    credentials = {
+      openaiApiKey: values.get("openai_api_key") ?? "",
+      huggingFaceToken: values.get("huggingface_token") ?? "",
+    };
+    await saveCredentials(credentials);
+  }
+  if (values.has("openai_api_key") || values.has("huggingface_token") || values.has("credential_cleanup_pending")) {
+    await removeLegacyCredentials(db);
+  }
   return SettingsSchema.parse({
-    openaiApiKey: values.get("openai_api_key") ?? "",
+    openaiApiKey: credentials?.openaiApiKey ?? "",
     llmBaseUrl: values.get("llm_base_url") ?? "",
     llmModel: values.get("llm_model") ?? "",
     whisperModel: values.get("whisper_model") ?? "medium",
     whisperLanguage: values.get("whisper_language") ?? "ko",
-    huggingFaceToken: values.get("huggingface_token") ?? "",
+    huggingFaceToken: credentials?.huggingFaceToken ?? "",
     enableDiarization: values.get("enable_diarization") !== "0",
     enableSummary: values.get("enable_summary") !== "0",
     uiLanguage: values.get("ui_language") === "ko" ? "ko" : "en",
@@ -131,14 +143,17 @@ export async function fetchSettings(): Promise<Settings> {
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {
+  await saveCredentials({
+    openaiApiKey: settings.openaiApiKey,
+    huggingFaceToken: settings.huggingFaceToken,
+  });
   const db = await getConnection();
+  await removeLegacyCredentials(db);
   const entries: Array<[string, string]> = [
-    ["openai_api_key", settings.openaiApiKey],
     ["llm_base_url", settings.llmBaseUrl],
     ["llm_model", settings.llmModel],
     ["whisper_model", settings.whisperModel],
     ["whisper_language", settings.whisperLanguage],
-    ["huggingface_token", settings.huggingFaceToken],
     ["enable_diarization", settings.enableDiarization ? "1" : "0"],
     ["enable_summary", settings.enableSummary ? "1" : "0"],
     ["ui_language", settings.uiLanguage],
@@ -150,4 +165,19 @@ export async function saveSettings(settings: Settings): Promise<void> {
       [key, value]
     );
   }
+}
+
+async function removeLegacyCredentials(db: Database): Promise<void> {
+  const pending = await db.select<unknown[]>(
+    "SELECT key FROM settings WHERE key IN ('openai_api_key', 'huggingface_token', 'credential_cleanup_pending') LIMIT 1"
+  );
+  if (pending.length === 0) return;
+  await db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('credential_cleanup_pending', '1')");
+  await db.execute("DELETE FROM settings WHERE key IN ('openai_api_key', 'huggingface_token')");
+  await db.execute("VACUUM");
+  const checkpoints = await db.select<Array<{ busy: number }>>("PRAGMA wal_checkpoint(TRUNCATE)");
+  if (checkpoints.some((checkpoint) => checkpoint.busy !== 0)) {
+    throw new Error("Credential cleanup is busy. Please try again.");
+  }
+  await db.execute("DELETE FROM settings WHERE key = 'credential_cleanup_pending'");
 }
