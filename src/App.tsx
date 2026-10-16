@@ -91,6 +91,9 @@ function AppBody({
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [settingsSection, setSettingsSection] = useState<"preferences" | "downloads">("preferences");
     const [appError, setAppError] = useState<string | null>(null);
+    const [settingsError, setSettingsError] = useState<string | null>(null);
+    const [settingsLoading, setSettingsLoading] = useState(true);
+    const [settingsAttempt, setSettingsAttempt] = useState(0);
     const [selectingNote, setSelectingNote] = useState(false);
     const [dropActive, setDropActive] = useState(false);
     const editorRef = useRef<EditorHandle | null>(null);
@@ -215,10 +218,29 @@ function AppBody({
     }, [t]);
 
     useEffect(() => {
-        fetchSettings()
-            .then(setSettings)
-            .catch((caught) => setAppError(toMessage(caught)));
-    }, [setSettings]);
+        let cancelled = false;
+        const load = async () => {
+            try {
+                const loaded = await fetchSettings();
+                if (!cancelled) setSettings(loaded);
+            } catch (caught) {
+                if (!cancelled) setSettingsError(toMessage(caught));
+            } finally {
+                if (!cancelled) setSettingsLoading(false);
+            }
+        };
+        void load();
+        return () => {
+            cancelled = true;
+        };
+    }, [setSettings, settingsAttempt]);
+
+    const retrySettings = () => {
+        if (settingsLoading) return;
+        setSettingsError(null);
+        setSettingsLoading(true);
+        setSettingsAttempt((current) => current + 1);
+    };
 
     const handleSaveSettings = useCallback(
         async (next: Settings) => {
@@ -241,7 +263,16 @@ function AppBody({
 
     if (!settings) {
         return (
-            <div className={styles.loading}>{appError ?? t("app.loading")}</div>
+            <div className={styles.loading}>
+                <p role={settingsError === null ? "status" : "alert"}>
+                    {settingsError ?? t("app.loading")}
+                </p>
+                {(settingsError !== null || settingsAttempt > 0) && (
+                    <button type="button" onClick={retrySettings} disabled={settingsLoading}>
+                        {t("app.retry")}
+                    </button>
+                )}
+            </div>
         );
     }
 
