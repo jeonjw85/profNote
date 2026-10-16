@@ -8,6 +8,7 @@ import {
   type NotePatch,
 } from "../services/db";
 import { toMessage } from "../services/errors";
+import { syncNoteMarkdown } from "../services/markdown";
 import type { Note } from "../types";
 
 export function useNotes() {
@@ -43,6 +44,7 @@ export function useNotes() {
       try {
         await updateNoteFields(id, patch);
         await refresh();
+        await syncNoteMarkdown(id);
       } catch (caught) {
         setLoadError(toMessage(caught));
         throw caught instanceof Error

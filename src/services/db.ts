@@ -30,6 +30,14 @@ export async function fetchNotes(): Promise<Note[]> {
   return z.array(NoteSchema).parse(rows);
 }
 
+export async function fetchNote(id: string): Promise<Note | null> {
+  const db = await getConnection();
+  const rows = await db.select<unknown[]>(
+    `SELECT ${SELECT_NOTE_COLUMNS} FROM notes WHERE id = $1`, [id]
+  );
+  return rows.length === 0 ? null : NoteSchema.parse(rows[0]);
+}
+
 export async function insertNote(note: Note): Promise<void> {
   const db = await getConnection();
   await db.execute(

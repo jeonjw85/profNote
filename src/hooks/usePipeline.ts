@@ -4,16 +4,15 @@ import {
   getDiarizerStatus,
   runDiarization,
   transcribeAudio,
-  writeMarkdown,
 } from "../services/audio";
 import { insertNote, updateNoteFields } from "../services/db";
 import { toMessage } from "../services/errors";
 import { summarizeTranscript } from "../services/openai";
+import { syncNoteMarkdown } from "../services/markdown";
 import {
   buildTranscriptText,
   defaultNoteTitle,
   pickProfessorSpeaker,
-  renderMarkdownDocument,
 } from "../services/transcript";
 import type {
   Note,
@@ -242,13 +241,13 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
           );
           await updateNoteFields(id, { summary_md: summary, status: "ready" });
           await onNotesChanged();
-          try {
-            await writeMarkdown(`note_${id.slice(0, 8)}`, renderMarkdownDocument(note.title, summary));
-          } catch (caught) {
-            setWarning(
-              t("pipeline.markdownFail", { reason: toMessage(caught) })
-            );
-          }
+        }
+        try {
+          await syncNoteMarkdown(id);
+        } catch (caught) {
+          setWarning(
+            t("pipeline.markdownFail", { reason: toMessage(caught) })
+          );
         }
       } catch (caught) {
         setFailure(toMessage(caught));
@@ -322,10 +321,7 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
         await updateNoteFields(note.id, { summary_md: summary, status: "ready" });
         await onNotesChanged();
         try {
-          await writeMarkdown(
-            `note_${note.id.slice(0, 8)}`,
-            renderMarkdownDocument(note.title, summary)
-          );
+          await syncNoteMarkdown(note.id);
         } catch (caught) {
           setWarning(
             t("pipeline.markdownFail", { reason: toMessage(caught) })
