@@ -62,30 +62,21 @@ export type NotePatch = Partial<
 >;
 
 export async function updateNoteFields(id: string, patch: NotePatch): Promise<void> {
+  const fields = [
+    "title", "transcript", "summary_md", "status", "segments_json", "professor_speaker",
+  ] as const;
+  const entries = fields.flatMap((field) =>
+    patch[field] === undefined ? [] : [[field, patch[field]] as const]
+  );
+  if (entries.length === 0) return;
   const db = await getConnection();
-  const rows = await db.select<unknown[]>(
-    `SELECT ${SELECT_NOTE_COLUMNS} FROM notes WHERE id = $1`,
-    [id]
+  const assignments = entries.map(([field], index) => `${field} = $${index + 1}`);
+  assignments.push(`updated_at = $${entries.length + 1}`);
+  const result = await db.execute(
+    `UPDATE notes SET ${assignments.join(", ")} WHERE id = $${entries.length + 2}`,
+    [...entries.map(([, value]) => value), new Date().toISOString(), id]
   );
-  const existing = NoteSchema.parse(rows[0]);
-  const updated: Note = {
-    ...existing,
-    ...patch,
-    updated_at: new Date().toISOString(),
-  };
-  await db.execute(
-    "UPDATE notes SET title = $1, transcript = $2, summary_md = $3, status = $4, segments_json = $5, professor_speaker = $6, updated_at = $7 WHERE id = $8",
-    [
-      updated.title,
-      updated.transcript,
-      updated.summary_md,
-      updated.status,
-      updated.segments_json,
-      updated.professor_speaker,
-      updated.updated_at,
-      id,
-    ]
-  );
+  if (result.rowsAffected === 0) throw new Error("The note no longer exists.");
 }
 
 export async function deleteNote(id: string): Promise<void> {
