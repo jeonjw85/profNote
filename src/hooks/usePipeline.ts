@@ -257,6 +257,13 @@ export function usePipeline({ settings, onNotesChanged, onNoteCreated }: Pipelin
         } catch {
           setFailure((current) => current ?? toMessage(caught));
         }
+        if (transcriptSaved) {
+          try {
+            await syncNoteMarkdown(id);
+          } catch (exportError) {
+            setWarning(t("pipeline.markdownFail", { reason: toMessage(exportError) }));
+          }
+        }
       } finally {
         runningRef.current = false;
         setPreview(null);
